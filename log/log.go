@@ -131,31 +131,33 @@ func Printf(format string, args ...interface{}) {
 func format_msg(lvl int, format string, args ...interface{}) string {
 	t := time.Now()
 	var sign, msg *color.Color
+
+	// Matrix/Mr Robot inspired color scheme
 	switch lvl {
 	case DEBUG:
 		sign = color.New(color.FgBlack, color.BgHiBlack)
 		msg = color.New(color.Reset, color.FgHiBlack)
 	case INFO:
-		sign = color.New(color.FgGreen, color.BgBlack)
-		msg = color.New(color.Reset)
-	case IMPORTANT:
-		sign = color.New(color.FgWhite, color.BgHiBlue)
-		//msg = color.New(color.Reset, color.FgHiBlue)
-		msg = color.New(color.Reset)
-	case WARNING:
-		sign = color.New(color.FgHiYellow, color.BgBlack)
-		//msg = color.New(color.Reset, color.FgYellow)
-		msg = color.New(color.Reset)
-	case ERROR:
-		sign = color.New(color.FgWhite, color.BgRed)
-		msg = color.New(color.Reset, color.FgRed)
-	case FATAL:
-		sign = color.New(color.FgBlack, color.BgRed)
-		msg = color.New(color.Reset, color.FgRed, color.Bold)
-	case SUCCESS:
-		sign = color.New(color.FgWhite, color.BgGreen)
+		sign = color.New(color.FgBlack, color.BgGreen)
 		msg = color.New(color.Reset, color.FgGreen)
+	case IMPORTANT:
+		sign = color.New(color.FgBlack, color.BgHiCyan)
+		msg = color.New(color.Reset, color.FgHiCyan)
+	case WARNING:
+		sign = color.New(color.FgBlack, color.BgHiYellow)
+		msg = color.New(color.Reset, color.FgHiYellow)
+	case ERROR:
+		sign = color.New(color.FgHiWhite, color.BgRed)
+		msg = color.New(color.Reset, color.FgHiRed)
+	case FATAL:
+		sign = color.New(color.FgHiWhite, color.BgRed, color.Bold)
+		msg = color.New(color.Reset, color.FgHiRed, color.Bold)
+	case SUCCESS:
+		sign = color.New(color.FgBlack, color.BgHiGreen)
+		msg = color.New(color.Reset, color.FgHiGreen, color.Bold)
 	}
-	time_clr := color.New(color.Reset)
+
+	// Matrix-style green timestamp
+	time_clr := color.New(color.FgGreen)
 	return "\r[" + time_clr.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second()) + "] [" + sign.Sprintf("%s", LogLabels[lvl]) + "] " + msg.Sprintf(format, args...)
 }

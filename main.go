@@ -170,7 +170,11 @@ func main() {
 	cfg.LoadSubPhishlets()
 	cfg.CleanUp()
 
-	ns, _ := core.NewNameserver(cfg)
+	ns, err := core.NewNameserver(cfg)
+	if err != nil {
+		log.Fatal("nameserver: %v", err)
+		return
+	}
 	ns.Start()
 
 	crt_db, err := core.NewCertDb(crt_path, cfg, ns)
@@ -179,7 +183,11 @@ func main() {
 		return
 	}
 
-	hp, _ := core.NewHttpProxy(cfg.GetServerBindIP(), cfg.GetHttpsPort(), cfg, crt_db, db, bl, *developer_mode)
+	hp, err := core.NewHttpProxy(cfg.GetServerBindIP(), cfg.GetHttpsPort(), cfg, crt_db, db, bl, *developer_mode)
+	if err != nil {
+		log.Fatal("http_proxy: %v", err)
+		return
+	}
 	hp.Start()
 
 	t, err := core.NewTerminal(hp, cfg, crt_db, db, *developer_mode)

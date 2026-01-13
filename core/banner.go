@@ -16,16 +16,19 @@ func putAsciiArt(s string) {
 		d := string(c)
 		switch string(c) {
 		case " ":
-			color.Set(color.BgRed)
+			// Matrix green instead of red
+			color.Set(color.BgGreen)
 			d = " "
 		case "@":
 			color.Set(color.BgBlack)
 			d = " "
 		case "#":
-			color.Set(color.BgHiRed)
+			// Bright green highlights
+			color.Set(color.BgHiGreen)
 			d = " "
 		case "W":
-			color.Set(color.BgWhite)
+			// Cyan accents instead of white
+			color.Set(color.BgHiCyan)
 			d = " "
 		case "_":
 			color.Unset()
@@ -43,11 +46,13 @@ func printLogo(s string) {
 		d := string(c)
 		switch string(c) {
 		case "_":
-			color.Set(color.FgWhite)
+			// Matrix bright green for underscores
+			color.Set(color.FgHiGreen)
 		case "\n":
 			color.Unset()
 		default:
-			color.Set(color.FgHiBlack)
+			// Matrix dim green for other characters
+			color.Set(color.FgGreen)
 		}
 		fmt.Print(d)
 	}
@@ -55,25 +60,25 @@ func printLogo(s string) {
 }
 
 func printUpdateName() {
-	nameClr := color.New(color.FgHiWhite)
+	nameClr := color.New(color.FgHiCyan)
 	txt := nameClr.Sprintf("               - --  Community Edition  -- -")
 	fmt.Fprintf(color.Output, "%s", txt)
 }
 
 func printOneliner1() {
-	handleClr := color.New(color.FgHiBlue)
-	versionClr := color.New(color.FgGreen)
-	textClr := color.New(color.FgHiBlack)
+	handleClr := color.New(color.FgHiCyan)
+	versionClr := color.New(color.FgHiGreen, color.Bold)
+	textClr := color.New(color.FgGreen)
 	spc := strings.Repeat(" ", 10-len(VERSION))
 	txt := textClr.Sprintf("      by Kuba Gretzky (") + handleClr.Sprintf("@mrgretzky") + textClr.Sprintf(")") + spc + textClr.Sprintf("version ") + versionClr.Sprintf("%s", VERSION)
 	fmt.Fprintf(color.Output, "%s", txt)
 }
 
 func printOneliner2() {
-	textClr := color.New(color.FgHiBlack)
-	red := color.New(color.FgRed)
-	white := color.New(color.FgWhite)
-	txt := textClr.Sprintf("                   no ") + red.Sprintf("nginx") + white.Sprintf(" - ") + textClr.Sprintf("pure ") + red.Sprintf("evil")
+	textClr := color.New(color.FgGreen)
+	accent := color.New(color.FgHiGreen)
+	highlight := color.New(color.FgHiCyan)
+	txt := textClr.Sprintf("                   no ") + accent.Sprintf("nginx") + highlight.Sprintf(" - ") + textClr.Sprintf("pure ") + accent.Sprintf("evil")
 	fmt.Fprintf(color.Output, "%s", txt)
 }
 
