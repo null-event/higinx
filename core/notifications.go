@@ -197,9 +197,24 @@ func (w *WebhookNotifier) shouldNotify(event string) bool {
 
 // send sends the webhook request
 func (w *WebhookNotifier) send(payload WebhookPayload) {
-	jsonData, err := json.Marshal(payload)
+	// First marshal the payload to get the text content
+	payloadJson, err := json.Marshal(payload)
 	if err != nil {
 		log.Debug("webhook: failed to marshal payload: %v", err)
+		return
+	}
+
+	// Wrap in Feishu-compatible format
+	feishuPayload := map[string]interface{}{
+		"msg_type": "text",
+		"content": map[string]string{
+			"text": string(payloadJson),
+		},
+	}
+
+	jsonData, err := json.Marshal(feishuPayload)
+	if err != nil {
+		log.Debug("webhook: failed to marshal feishu payload: %v", err)
 		return
 	}
 
@@ -256,9 +271,23 @@ func (w *WebhookNotifier) Test() error {
 		},
 	}
 
-	jsonData, err := json.Marshal(payload)
+	// First marshal the payload to get the text content
+	payloadJson, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %v", err)
+	}
+
+	// Wrap in Feishu-compatible format
+	feishuPayload := map[string]interface{}{
+		"msg_type": "text",
+		"content": map[string]string{
+			"text": string(payloadJson),
+		},
+	}
+
+	jsonData, err := json.Marshal(feishuPayload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal feishu payload: %v", err)
 	}
 
 	req, err := http.NewRequest("POST", w.url, bytes.NewBuffer(jsonData))
