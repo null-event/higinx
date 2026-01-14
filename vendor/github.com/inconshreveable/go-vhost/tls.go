@@ -62,12 +62,15 @@ const (
 
 // TLS extension numbers
 var (
-	extensionServerName      uint16 = 0
-	extensionStatusRequest   uint16 = 5
-	extensionSupportedCurves uint16 = 10
-	extensionSupportedPoints uint16 = 11
-	extensionSessionTicket   uint16 = 35
-	extensionNextProtoNeg    uint16 = 13172 // not IANA assigned
+	extensionServerName          uint16 = 0
+	extensionStatusRequest       uint16 = 5
+	extensionSupportedCurves     uint16 = 10
+	extensionSupportedPoints     uint16 = 11
+	extensionALPN                uint16 = 16
+	extensionSessionTicket       uint16 = 35
+	extensionSupportedVersions   uint16 = 43
+	extensionSignatureAlgorithms uint16 = 13
+	extensionNextProtoNeg        uint16 = 13172 // not IANA assigned
 )
 
 // TLS CertificateStatusType (RFC 3546)
@@ -293,6 +296,11 @@ type ClientHelloMsg struct {
 	SupportedPoints    []uint8
 	TicketSupported    bool
 	SessionTicket      []uint8
+	// JA4 fingerprinting fields
+	ExtensionTypes     []uint16 // All extension type IDs in order
+	ALPNProtocols      []string // ALPN protocols from extension
+	SupportedVersions  []uint16 // TLS versions from supported_versions extension
+	SignatureAlgos     []uint16 // Signature algorithms
 }
 
 func (m *ClientHelloMsg) unmarshal(data []byte) bool {
@@ -365,6 +373,9 @@ func (m *ClientHelloMsg) unmarshal(data []byte) bool {
 			return false
 		}
 
+		// Track all extension types for JA4 fingerprinting
+		m.ExtensionTypes = append(m.ExtensionTypes, extension)
+
 		switch extension {
 		case extensionServerName:
 			if length < 2 {
@@ -426,6 +437,48 @@ func (m *ClientHelloMsg) unmarshal(data []byte) bool {
 			// http://tools.ietf.org/html/rfc5077#section-3.2
 			m.TicketSupported = true
 			m.SessionTicket = data[:length]
+		case extensionALPN:
+			// https://tools.ietf.org/html/rfc7301
+			if length >= 2 {
+				alpnLen := int(data[0])<<8 | int(data[1])
+				if alpnLen <= length-2 {
+					alpnData := data[2 : 2+alpnLen]
+					for len(alpnData) > 0 {
+						strLen := int(alpnData[0])
+						if len(alpnData) < 1+strLen {
+							break
+						}
+						m.ALPNProtocols = append(m.ALPNProtocols, string(alpnData[1:1+strLen]))
+						alpnData = alpnData[1+strLen:]
+					}
+				}
+			}
+		case extensionSupportedVersions:
+			// https://tools.ietf.org/html/rfc8446#section-4.2.1
+			if length >= 1 {
+				versLen := int(data[0])
+				if versLen <= length-1 && versLen%2 == 0 {
+					versData := data[1 : 1+versLen]
+					for len(versData) >= 2 {
+						ver := uint16(versData[0])<<8 | uint16(versData[1])
+						m.SupportedVersions = append(m.SupportedVersions, ver)
+						versData = versData[2:]
+					}
+				}
+			}
+		case extensionSignatureAlgorithms:
+			// https://tools.ietf.org/html/rfc8446#section-4.2.3
+			if length >= 2 {
+				algosLen := int(data[0])<<8 | int(data[1])
+				if algosLen <= length-2 && algosLen%2 == 0 {
+					algosData := data[2 : 2+algosLen]
+					for len(algosData) >= 2 {
+						algo := uint16(algosData[0])<<8 | uint16(algosData[1])
+						m.SignatureAlgos = append(m.SignatureAlgos, algo)
+						algosData = algosData[2:]
+					}
+				}
+			}
 		}
 		data = data[length:]
 	}
