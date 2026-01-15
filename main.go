@@ -24,6 +24,8 @@ var debug_log = flag.Bool("debug", false, "Enable debug output")
 var developer_mode = flag.Bool("developer", false, "Enable developer mode (generates self-signed certificates for all hostnames)")
 var cfg_dir = flag.String("c", "", "Configuration directory path")
 var version_flag = flag.Bool("v", false, "Show version")
+var cert_path = flag.String("cert", "", "Path to PEM certificate file (requires -developer)")
+var key_path = flag.String("key", "", "Path to PEM private key file (requires -developer)")
 
 func joinPath(base_path string, rel_path string) string {
 	var ret string
@@ -57,6 +59,28 @@ func main() {
 	if *version_flag == true {
 		log.Info("version: %s", core.VERSION)
 		return
+	}
+
+	// Validate -cert and -key flags
+	if (*cert_path != "" || *key_path != "") && !*developer_mode {
+		log.Fatal("-cert and -key flags require -developer mode")
+		return
+	}
+	if (*cert_path != "" && *key_path == "") || (*cert_path == "" && *key_path != "") {
+		log.Fatal("-cert and -key flags must be specified together")
+		return
+	}
+	if *cert_path != "" {
+		if _, err := os.Stat(*cert_path); os.IsNotExist(err) {
+			log.Fatal("certificate file not found: %s", *cert_path)
+			return
+		}
+	}
+	if *key_path != "" {
+		if _, err := os.Stat(*key_path); os.IsNotExist(err) {
+			log.Fatal("private key file not found: %s", *key_path)
+			return
+		}
 	}
 
 	exe_path, _ := os.Executable()
@@ -177,7 +201,7 @@ func main() {
 	}
 	ns.Start()
 
-	crt_db, err := core.NewCertDb(crt_path, cfg, ns)
+	crt_db, err := core.NewCertDb(crt_path, cfg, ns, *cert_path, *key_path)
 	if err != nil {
 		log.Fatal("certdb: %v", err)
 		return
