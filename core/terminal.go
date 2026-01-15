@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -183,6 +184,12 @@ func (t *Terminal) DoWork() {
 			err := t.handleCrawlfence(args[1:])
 			if err != nil {
 				log.Error("crawlfence: %v", err)
+			}
+		case "shell":
+			cmd_ok = true
+			err := t.handleShell(args[1:])
+			if err != nil {
+				log.Error("shell: %v", err)
 			}
 		case "test-certs":
 			cmd_ok = true
@@ -467,6 +474,33 @@ func (t *Terminal) handleCrawlfence(args []string) error {
 	}
 
 	return fmt.Errorf("invalid syntax: %s", args)
+}
+
+func (t *Terminal) handleShell(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: shell <command>")
+	}
+
+	// Join all arguments to form the complete command
+	cmdStr := strings.Join(args, " ")
+
+	// Execute the command using bash
+	cmd := exec.Command("bash", "-c", cmdStr)
+	cmd.Env = os.Environ()
+
+	// Capture both stdout and stderr
+	output, err := cmd.CombinedOutput()
+	if len(output) > 0 {
+		log.Printf("\n%s", string(output))
+	}
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("command exited with code %d", exitErr.ExitCode())
+		}
+		return err
+	}
+
+	return nil
 }
 
 func (t *Terminal) handleStats(args []string) error {
@@ -1585,6 +1619,19 @@ TIP: Use 'lures get-url' with import/export for bulk URL generation.`, LAYER_TOP
 	h.AddSubCommand("crawlfence", nil, "", "show crawlfence status for all phishlets")
 	h.AddSubCommand("crawlfence", []string{"ja4"}, "ja4 <phishlet>|all", "show collected JA4 signatures (learning mode)")
 	h.AddSubCommand("crawlfence", []string{"clear"}, "clear <phishlet>|all", "clear JA4 learning data")
+
+	h.AddCommand("shell", "general", "execute a shell command", `Execute a bash command and display the output.
+
+EXAMPLES:
+  shell ls -la                    List files in current directory
+  shell whoami                    Show current user
+  shell cat /etc/hosts            Display hosts file
+  shell ps aux | grep evilginx    Find evilginx processes
+
+NOTE: Commands are executed using bash -c, so pipes and
+redirections work as expected.`, LAYER_TOP,
+		readline.PcItem("shell"))
+	h.AddSubCommand("shell", nil, "<command>", "execute <command> in bash and display output")
 
 	h.AddCommand("test-certs", "general", "test TLS certificates for active phishlets", "Test availability of set up TLS certificates for active phishlets.", LAYER_TOP,
 		readline.PcItem("test-certs"))
