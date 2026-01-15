@@ -66,10 +66,10 @@ var (
 	extensionStatusRequest       uint16 = 5
 	extensionSupportedCurves     uint16 = 10
 	extensionSupportedPoints     uint16 = 11
+	extensionSignatureAlgorithms uint16 = 13
 	extensionALPN                uint16 = 16
 	extensionSessionTicket       uint16 = 35
 	extensionSupportedVersions   uint16 = 43
-	extensionSignatureAlgorithms uint16 = 13
 	extensionNextProtoNeg        uint16 = 13172 // not IANA assigned
 )
 
@@ -296,11 +296,10 @@ type ClientHelloMsg struct {
 	SupportedPoints    []uint8
 	TicketSupported    bool
 	SessionTicket      []uint8
-	// JA4 fingerprinting fields
-	ExtensionTypes     []uint16 // All extension type IDs in order
-	ALPNProtocols      []string // ALPN protocols from extension
-	SupportedVersions  []uint16 // TLS versions from supported_versions extension
-	SignatureAlgos     []uint16 // Signature algorithms
+	SupportedVersions  []uint16
+	ExtensionTypes     []uint16
+	ALPNProtocols      []string
+	SignatureAlgos     []uint16
 }
 
 func (m *ClientHelloMsg) unmarshal(data []byte) bool {
@@ -437,47 +436,56 @@ func (m *ClientHelloMsg) unmarshal(data []byte) bool {
 			// http://tools.ietf.org/html/rfc5077#section-3.2
 			m.TicketSupported = true
 			m.SessionTicket = data[:length]
+		case extensionSignatureAlgorithms:
+			// RFC 5246 section 7.4.1.4.1
+			if length < 2 {
+				break
+			}
+			l := int(data[0])<<8 | int(data[1])
+			if l%2 == 1 || length != l+2 {
+				break
+			}
+			numAlgos := l / 2
+			m.SignatureAlgos = make([]uint16, numAlgos)
+			d := data[2:]
+			for i := 0; i < numAlgos; i++ {
+				m.SignatureAlgos[i] = uint16(d[0])<<8 | uint16(d[1])
+				d = d[2:]
+			}
 		case extensionALPN:
-			// https://tools.ietf.org/html/rfc7301
-			if length >= 2 {
-				alpnLen := int(data[0])<<8 | int(data[1])
-				if alpnLen <= length-2 {
-					alpnData := data[2 : 2+alpnLen]
-					for len(alpnData) > 0 {
-						strLen := int(alpnData[0])
-						if len(alpnData) < 1+strLen {
-							break
-						}
-						m.ALPNProtocols = append(m.ALPNProtocols, string(alpnData[1:1+strLen]))
-						alpnData = alpnData[1+strLen:]
-					}
+			// RFC 7301
+			if length < 2 {
+				break
+			}
+			l := int(data[0])<<8 | int(data[1])
+			if length != l+2 {
+				break
+			}
+			d := data[2:]
+			for len(d) > 0 {
+				protoLen := int(d[0])
+				d = d[1:]
+				if len(d) < protoLen {
+					break
 				}
+				m.ALPNProtocols = append(m.ALPNProtocols, string(d[:protoLen]))
+				d = d[protoLen:]
 			}
 		case extensionSupportedVersions:
-			// https://tools.ietf.org/html/rfc8446#section-4.2.1
-			if length >= 1 {
-				versLen := int(data[0])
-				if versLen <= length-1 && versLen%2 == 0 {
-					versData := data[1 : 1+versLen]
-					for len(versData) >= 2 {
-						ver := uint16(versData[0])<<8 | uint16(versData[1])
-						m.SupportedVersions = append(m.SupportedVersions, ver)
-						versData = versData[2:]
-					}
-				}
+			// RFC 8446
+			if length < 1 {
+				break
 			}
-		case extensionSignatureAlgorithms:
-			// https://tools.ietf.org/html/rfc8446#section-4.2.3
-			if length >= 2 {
-				algosLen := int(data[0])<<8 | int(data[1])
-				if algosLen <= length-2 && algosLen%2 == 0 {
-					algosData := data[2 : 2+algosLen]
-					for len(algosData) >= 2 {
-						algo := uint16(algosData[0])<<8 | uint16(algosData[1])
-						m.SignatureAlgos = append(m.SignatureAlgos, algo)
-						algosData = algosData[2:]
-					}
-				}
+			l := int(data[0])
+			if l%2 == 1 || length != l+1 {
+				break
+			}
+			numVersions := l / 2
+			m.SupportedVersions = make([]uint16, numVersions)
+			d := data[1:]
+			for i := 0; i < numVersions; i++ {
+				m.SupportedVersions[i] = uint16(d[0])<<8 | uint16(d[1])
+				d = d[2:]
 			}
 		}
 		data = data[length:]
