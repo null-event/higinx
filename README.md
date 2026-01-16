@@ -178,6 +178,20 @@ Ensure no other services are using ports 53 (DNS) or 443 (HTTPS).
 - Check phishlet hostname is set correctly
 - Ensure DNS is resolving to your server
 
+## Roadmap
+- [x] Support wildcard TLS certificates
+- [x] Support loading multiple certificates from disk
+- [ ] Implement additional OPSEC hardening measures 
+- [ ] Improve branding and aesthetics
+- [ ] Add BiTB integration
+- [ ] Add Rocketchat, SMS, etc. notifications
+- [ ] Rewrite URLs on Phishing Pages to avoid detection through URL Path pattern matching
+- [ ] Define your own CSP (Content security Policy) to avoid telemetry/canary/detection by leaking phishing domains. Implement this PR: https://github.com/kgretzky/evilginx2/pull/1006/commits/d88b98c0d31ce662809797d0942bab101a18270d
+- [ ] Improve crawlfence JS injection and telemetry gathering
+- [ ] Implement background browser
+- [ ] Revamp data storage
+- [ ] Implement API and client-server architecture
+
 ## License
 
 **Higinx** is based on evilginx2 by Kuba Gretzky ([@mrgretzky](https://twitter.com/mrgretzky)) and it's released under BSD-3 license.
