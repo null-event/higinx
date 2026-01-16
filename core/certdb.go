@@ -21,24 +21,62 @@ import (
 )
 
 type CertDb struct {
-	cache_dir  string
-	magic      *certmagic.Config
-	cfg        *Config
-	ns         *Nameserver
-	caCert     tls.Certificate
-	tlsCache   map[string]*tls.Certificate
-	customCert *tls.Certificate
+	cache_dir   string
+	magic       *certmagic.Config
+	cfg         *Config
+	ns          *Nameserver
+	caCert      tls.Certificate
+	tlsCache    map[string]*tls.Certificate
+	customCert  *tls.Certificate            // Single custom certificate (backward compatibility)
+	customCerts map[string]*tls.Certificate // Multiple custom certificates keyed by hostname/pattern
 }
 
-func NewCertDb(cache_dir string, cfg *Config, ns *Nameserver, certPath string, keyPath string) (*CertDb, error) {
+// extractCertHostnames extracts all hostnames (CN and SANs) from a certificate
+func extractCertHostnames(cert *tls.Certificate) ([]string, error) {
+	if len(cert.Certificate) == 0 {
+		return nil, fmt.Errorf("certificate has no data")
+	}
+
+	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		return nil, err
+	}
+
+	hostnames := make([]string, 0)
+
+	// Add Common Name if present
+	if x509Cert.Subject.CommonName != "" {
+		hostnames = append(hostnames, x509Cert.Subject.CommonName)
+	}
+
+	// Add Subject Alternative Names (SANs)
+	for _, san := range x509Cert.DNSNames {
+		// Avoid duplicates
+		found := false
+		for _, h := range hostnames {
+			if h == san {
+				found = true
+				break
+			}
+		}
+		if !found {
+			hostnames = append(hostnames, san)
+		}
+	}
+
+	return hostnames, nil
+}
+
+func NewCertDb(cache_dir string, cfg *Config, ns *Nameserver, certPaths []string, keyPaths []string) (*CertDb, error) {
 	os.Setenv("XDG_DATA_HOME", cache_dir)
 
 	o := &CertDb{
-		cache_dir:  cache_dir,
-		cfg:        cfg,
-		ns:         ns,
-		tlsCache:   make(map[string]*tls.Certificate),
-		customCert: nil,
+		cache_dir:   cache_dir,
+		cfg:         cfg,
+		ns:          ns,
+		tlsCache:    make(map[string]*tls.Certificate),
+		customCert:  nil,
+		customCerts: make(map[string]*tls.Certificate),
 	}
 
 	if err := os.MkdirAll(filepath.Join(cache_dir, "sites"), 0700); err != nil {
@@ -48,14 +86,34 @@ func NewCertDb(cache_dir string, cfg *Config, ns *Nameserver, certPath string, k
 	certmagic.DefaultACME.Agreed = true
 	certmagic.DefaultACME.Email = o.GetEmail()
 
-	// Load custom certificate if provided
-	if certPath != "" && keyPath != "" {
-		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load custom certificate: %v", err)
+	// Load custom certificates if provided
+	if len(certPaths) > 0 && len(keyPaths) > 0 {
+		for i := 0; i < len(certPaths); i++ {
+			certPath := certPaths[i]
+			keyPath := keyPaths[i]
+
+			cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load custom certificate from %s: %v", certPath, err)
+			}
+
+			// Extract hostnames from the certificate
+			hostnames, err := extractCertHostnames(&cert)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse certificate %s: %v", certPath, err)
+			}
+
+			// Map each hostname to this certificate
+			for _, hostname := range hostnames {
+				o.customCerts[hostname] = &cert
+				log.Info("loaded custom certificate for '%s' from: %s", hostname, certPath)
+			}
+
+			// Keep backward compatibility: if only one cert provided, also set customCert
+			if len(certPaths) == 1 {
+				o.customCert = &cert
+			}
 		}
-		o.customCert = &cert
-		log.Info("loaded custom certificate from: %s", certPath)
 	}
 
 	err := o.generateCertificates()
@@ -285,8 +343,39 @@ func (o *CertDb) GetCustomCertificate() *tls.Certificate {
 	return o.customCert
 }
 
+// findMatchingCustomCert finds a custom certificate that matches the given hostname
+// It supports exact matches and wildcard certificates (e.g., *.example.com)
+func (o *CertDb) findMatchingCustomCert(hostname string) *tls.Certificate {
+	// Try exact match first
+	if cert, ok := o.customCerts[hostname]; ok {
+		return cert
+	}
+
+	// Try wildcard match: if hostname is "sub.example.com", try "*.example.com"
+	parts := strings.SplitN(hostname, ".", 2)
+	if len(parts) == 2 {
+		wildcardPattern := "*." + parts[1]
+		if cert, ok := o.customCerts[wildcardPattern]; ok {
+			return cert
+		}
+	}
+
+	return nil
+}
+
 func (o *CertDb) getSelfSignedCertificate(host string, phish_host string, port int) (cert *tls.Certificate, err error) {
-	// Return custom certificate if available
+	// Determine which hostname to match against
+	matchHost := host
+	if phish_host != "" {
+		matchHost = phish_host
+	}
+
+	// Try to find a matching custom certificate from the map
+	if customCert := o.findMatchingCustomCert(matchHost); customCert != nil {
+		return customCert, nil
+	}
+
+	// Fall back to single custom certificate for backward compatibility
 	if o.customCert != nil {
 		return o.customCert, nil
 	}
