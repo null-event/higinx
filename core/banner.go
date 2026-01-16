@@ -16,18 +16,18 @@ func putAsciiArt(s string) {
 		d := string(c)
 		switch string(c) {
 		case " ":
-			// Matrix green instead of red
-			color.Set(color.BgGreen)
+			// Tokyo Night blue
+			color.Set(color.BgHiBlue)
 			d = " "
 		case "@":
 			color.Set(color.BgBlack)
 			d = " "
 		case "#":
-			// Bright green highlights
-			color.Set(color.BgHiGreen)
+			// Tokyo Night purple highlights
+			color.Set(color.BgHiMagenta)
 			d = " "
 		case "W":
-			// Cyan accents instead of white
+			// Tokyo Night cyan accents
 			color.Set(color.BgHiCyan)
 			d = " "
 		case "_":
@@ -46,13 +46,13 @@ func printLogo(s string) {
 		d := string(c)
 		switch string(c) {
 		case "_":
-			// Matrix bright green for underscores
-			color.Set(color.FgHiGreen)
+			// Tokyo Night cyan for underscores
+			color.Set(color.FgHiCyan)
 		case "\n":
 			color.Unset()
 		default:
-			// Matrix dim green for other characters
-			color.Set(color.FgGreen)
+			// Tokyo Night blue for other characters
+			color.Set(color.FgHiBlue)
 		}
 		fmt.Print(d)
 	}
@@ -67,18 +67,18 @@ func printUpdateName() {
 
 func printOneliner1() {
 	handleClr := color.New(color.FgHiCyan)
-	versionClr := color.New(color.FgHiGreen, color.Bold)
-	textClr := color.New(color.FgGreen)
+	versionClr := color.New(color.FgHiMagenta, color.Bold)
+	textClr := color.New(color.FgHiBlue)
 	spc := strings.Repeat(" ", 10-len(VERSION))
 	txt := textClr.Sprintf("      by Kuba Gretzky (") + handleClr.Sprintf("@mrgretzky") + textClr.Sprintf(")") + spc + textClr.Sprintf("version ") + versionClr.Sprintf("%s", VERSION)
 	fmt.Fprintf(color.Output, "%s", txt)
 }
 
 func printOneliner2() {
-	textClr := color.New(color.FgGreen)
-	accent := color.New(color.FgHiGreen)
+	textClr := color.New(color.FgHiBlue)
+	accent := color.New(color.FgHiMagenta)
 	highlight := color.New(color.FgHiCyan)
-	txt := textClr.Sprintf("                   no ") + accent.Sprintf("nginx") + highlight.Sprintf(" - ") + textClr.Sprintf("pure ") + accent.Sprintf("evil")
+	txt := textClr.Sprintf("                   no ") + accent.Sprintf("nginx") + highlight.Sprintf(" - ") + textClr.Sprintf("high ") + accent.Sprintf("jinx")
 	fmt.Fprintf(color.Output, "%s", txt)
 }
 
@@ -87,22 +87,22 @@ func Banner() {
 
 	putAsciiArt("__                                     __\n")
 	putAsciiArt("_   @@     @@@@@@@@@@@@@@@@@@@     @@   _")
-	printLogo(`    ___________      __ __           __               `)
+	printLogo(`      .__     .__       .__                            `)
 	fmt.Println()
 	putAsciiArt("  @@@@    @@@@@@@@@@@@@@@@@@@@@    @@@@  ")
-	printLogo(`    \_   _____/__  _|__|  |    ____ |__| ____ ___  ___`)
+	printLogo(`      |  |__  |__|  ____|__| ____  ___  ___            `)
 	fmt.Println()
 	putAsciiArt("  @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  ")
-	printLogo(`     |    __)_\  \/ /  |  |   / __ \|  |/    \\  \/  /`)
+	printLogo(`      |  |  \ |  | / ___\  |/    \ \  \/  /            `)
 	fmt.Println()
 	putAsciiArt("    @@@@@@@@@@###@@@@@@@###@@@@@@@@@@    ")
-	printLogo(`     |        \\   /|  |  |__/ /_/  >  |   |  \>    < `)
+	printLogo(`      |   Y  \|  |/ /_/  > |   |  \ >    <             `)
 	fmt.Println()
 	putAsciiArt("      @@@@@@@#####@@@@@#####@@@@@@@      ")
-	printLogo(`    /_______  / \_/ |__|____/\___  /|__|___|  /__/\_ \`)
+	printLogo(`      |___|  /|__|\___  /|_|___|  //__/\_ \            `)
 	fmt.Println()
 	putAsciiArt("       @@@@@@@###@@@@@@@###@@@@@@@       ")
-	printLogo(`            \/              /_____/         \/      \/`)
+	printLogo(`           \/    /_____/        \/       \/            `)
 	fmt.Println()
 	putAsciiArt("      @@@@@@@@@@@@@@@@@@@@@@@@@@@@@      \n")
 	putAsciiArt("     @@@@@WW@@@WW@@WWW@@WW@@@WW@@@@@     ")

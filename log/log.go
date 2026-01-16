@@ -132,17 +132,19 @@ func format_msg(lvl int, format string, args ...interface{}) string {
 	t := time.Now()
 	var sign, msg *color.Color
 
-	// Matrix/Mr Robot inspired color scheme
+	// Tokyo Night color scheme
+	// Colors: Blue #7aa2f7, Purple #bb9af7, Cyan #7dcfff, Green #73daca,
+	//         Yellow #e0af68, Red #f7768e, White #c0caf5, Black #414868
 	switch lvl {
 	case DEBUG:
-		sign = color.New(color.FgBlack, color.BgHiBlack)
+		sign = color.New(color.FgWhite, color.BgHiBlack)
 		msg = color.New(color.Reset, color.FgHiBlack)
 	case INFO:
-		sign = color.New(color.FgBlack, color.BgGreen)
-		msg = color.New(color.Reset, color.FgGreen)
+		sign = color.New(color.FgBlack, color.BgHiBlue)
+		msg = color.New(color.Reset, color.FgHiBlue)
 	case IMPORTANT:
-		sign = color.New(color.FgBlack, color.BgHiCyan)
-		msg = color.New(color.Reset, color.FgHiCyan)
+		sign = color.New(color.FgBlack, color.BgHiMagenta)
+		msg = color.New(color.Reset, color.FgHiMagenta)
 	case WARNING:
 		sign = color.New(color.FgBlack, color.BgHiYellow)
 		msg = color.New(color.Reset, color.FgHiYellow)
@@ -153,11 +155,11 @@ func format_msg(lvl int, format string, args ...interface{}) string {
 		sign = color.New(color.FgHiWhite, color.BgRed, color.Bold)
 		msg = color.New(color.Reset, color.FgHiRed, color.Bold)
 	case SUCCESS:
-		sign = color.New(color.FgBlack, color.BgHiGreen)
-		msg = color.New(color.Reset, color.FgHiGreen, color.Bold)
+		sign = color.New(color.FgBlack, color.BgHiCyan)
+		msg = color.New(color.Reset, color.FgHiCyan, color.Bold)
 	}
 
-	// Matrix-style green timestamp
-	time_clr := color.New(color.FgGreen)
+	// Tokyo Night dim timestamp
+	time_clr := color.New(color.FgHiBlack)
 	return "\r[" + time_clr.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second()) + "] [" + sign.Sprintf("%s", LogLabels[lvl]) + "] " + msg.Sprintf(format, args...)
 }
