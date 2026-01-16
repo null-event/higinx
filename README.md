@@ -181,6 +181,10 @@ Ensure no other services are using ports 53 (DNS) or 443 (HTTPS).
 ## Roadmap
 - [x] Support wildcard TLS certificates
 - [x] Support loading multiple certificates from disk
+- [x] Crawlfence initial implementation (Botguard)
+- [x] Statistics and export initial implementation
+- [x] Shell module
+- [x] OPSEC improvements, obfuscation for inject_js, etc.
 - [ ] Implement additional OPSEC hardening measures 
 - [ ] Improve branding and aesthetics
 - [ ] Add BiTB integration
