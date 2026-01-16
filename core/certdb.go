@@ -104,8 +104,10 @@ func NewCertDb(cache_dir string, cfg *Config, ns *Nameserver, certPaths []string
 			}
 
 			// Map each hostname to this certificate
+			// Create a copy to avoid loop variable capture bug
+			certCopy := cert
 			for _, hostname := range hostnames {
-				o.customCerts[hostname] = &cert
+				o.customCerts[hostname] = &certCopy
 				log.Info("loaded custom certificate for '%s' from: %s", hostname, certPath)
 			}
 
