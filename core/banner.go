@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	VERSION = "3.3.0"
+	VERSION = "3.4.0"
 )
 
 func putAsciiArt(s string) {
@@ -70,7 +70,7 @@ func printOneliner1() {
 	versionClr := color.New(color.FgHiMagenta, color.Bold)
 	textClr := color.New(color.FgHiBlue)
 	spc := strings.Repeat(" ", 10-len(VERSION))
-	txt := textClr.Sprintf("      by Kuba Gretzky (") + handleClr.Sprintf("@mrgretzky") + textClr.Sprintf(")") + spc + textClr.Sprintf("version ") + versionClr.Sprintf("%s", VERSION)
+	txt := textClr.Sprintf("      by @mrgretzky and (") + handleClr.Sprintf("@null-event") + textClr.Sprintf(")") + spc + textClr.Sprintf("version ") + versionClr.Sprintf("%s", VERSION)
 	fmt.Fprintf(color.Output, "%s", txt)
 }
 
