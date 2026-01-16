@@ -1,4 +1,4 @@
-TARGET=evilginx
+TARGET=higinx
 PACKAGES=core database log parser
 
 .PHONY: all build clean
