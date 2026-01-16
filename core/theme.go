@@ -4,60 +4,63 @@ import (
 	"github.com/fatih/color"
 )
 
-// Matrix/Mr Robot inspired color theme
+// Tokyo Night color theme
+// Based on: https://github.com/jiyometrik/tokyonight-windows-terminal
+// Colors: Blue #7aa2f7, Purple #bb9af7, Cyan #7dcfff, Green #73daca,
+//         Yellow #e0af68, Red #f7768e, White #c0caf5, Black #414868
 var (
-	// Primary colors - cyberpunk green palette
-	ColorPrimary   = color.New(color.FgHiGreen)           // Bright green - main text
-	ColorSecondary = color.New(color.FgGreen)             // Standard green - secondary
-	ColorDim       = color.New(color.FgGreen, color.Faint) // Dim green - timestamps, meta
-	ColorAccent    = color.New(color.FgHiCyan)            // Cyan - highlights, data
-	ColorMagenta   = color.New(color.FgHiMagenta)         // Magenta - important notices
+	// Primary colors - Tokyo Night palette
+	ColorPrimary   = color.New(color.FgHiBlue)             // Blue #7aa2f7 - main text
+	ColorSecondary = color.New(color.FgBlue)               // Darker blue - secondary
+	ColorDim       = color.New(color.FgHiBlack)            // Gray #414868 - timestamps, meta
+	ColorAccent    = color.New(color.FgHiMagenta)          // Purple #bb9af7 - highlights, data
+	ColorMagenta   = color.New(color.FgHiMagenta)          // Purple #bb9af7 - important notices
 
 	// Status colors
-	ColorSuccess = color.New(color.FgHiGreen, color.Bold) // Success messages
-	ColorWarning = color.New(color.FgHiYellow)            // Warnings
-	ColorError   = color.New(color.FgHiRed)               // Errors
+	ColorSuccess = color.New(color.FgHiCyan, color.Bold)   // Teal/Green #73daca - success
+	ColorWarning = color.New(color.FgHiYellow)             // Yellow #e0af68 - warnings
+	ColorError   = color.New(color.FgHiRed)                // Red #f7768e - errors
 	ColorFatal   = color.New(color.FgHiWhite, color.BgRed, color.Bold) // Fatal errors
 
 	// UI element colors
-	ColorPrompt    = color.New(color.FgHiGreen, color.Bold) // Command prompt
-	ColorInput     = color.New(color.FgHiWhite)             // User input
-	ColorHeader    = color.New(color.FgHiGreen, color.Bold, color.Underline) // Section headers
-	ColorTableHead = color.New(color.FgHiCyan, color.Bold)  // Table headers
-	ColorTableRow  = color.New(color.FgGreen)               // Table rows
-	ColorHighlight = color.New(color.FgHiWhite, color.Bold) // Highlighted text
-	ColorMuted     = color.New(color.FgHiBlack)             // Muted/disabled text
+	ColorPrompt    = color.New(color.FgHiBlue, color.Bold)              // Blue #7aa2f7 - command prompt
+	ColorInput     = color.New(color.FgHiWhite)                         // White #c0caf5 - user input
+	ColorHeader    = color.New(color.FgHiMagenta, color.Bold, color.Underline) // Purple - section headers
+	ColorTableHead = color.New(color.FgHiCyan, color.Bold)              // Cyan #7dcfff - table headers
+	ColorTableRow  = color.New(color.FgHiBlue)                          // Blue - table rows
+	ColorHighlight = color.New(color.FgHiWhite, color.Bold)             // White #c0caf5 - highlighted text
+	ColorMuted     = color.New(color.FgHiBlack)                         // Gray #414868 - muted/disabled text
 
 	// Badge/tag colors for log levels
-	ColorBadgeDebug   = color.New(color.FgBlack, color.BgHiBlack)
-	ColorBadgeInfo    = color.New(color.FgBlack, color.BgGreen)
-	ColorBadgeImport  = color.New(color.FgBlack, color.BgHiCyan)
+	ColorBadgeDebug   = color.New(color.FgWhite, color.BgHiBlack)
+	ColorBadgeInfo    = color.New(color.FgBlack, color.BgHiBlue)
+	ColorBadgeImport  = color.New(color.FgBlack, color.BgHiMagenta)
 	ColorBadgeWarning = color.New(color.FgBlack, color.BgHiYellow)
 	ColorBadgeError   = color.New(color.FgHiWhite, color.BgRed)
 	ColorBadgeFatal   = color.New(color.FgHiWhite, color.BgRed, color.Bold)
-	ColorBadgeSuccess = color.New(color.FgBlack, color.BgHiGreen)
+	ColorBadgeSuccess = color.New(color.FgBlack, color.BgHiCyan)
 
 	// Special colors for session/credential captures
-	ColorCapture  = color.New(color.FgHiGreen, color.Bold, color.BlinkSlow) // Captured credentials
-	ColorSession  = color.New(color.FgHiMagenta)                            // Session info
-	ColorToken    = color.New(color.FgHiCyan)                               // Auth tokens
+	ColorCapture  = color.New(color.FgHiCyan, color.Bold, color.BlinkSlow) // Teal #73daca - captured credentials
+	ColorSession  = color.New(color.FgHiMagenta)                           // Purple #bb9af7 - session info
+	ColorToken    = color.New(color.FgHiCyan)                              // Cyan #7dcfff - auth tokens
 )
 
 // ASCII Art banner - Matrix style
 const MatrixBanner = `
-                    .__.__                 .__
-  _______  _|__|  |   ____ |__| ____ ___  ___
-_/ __ \  \/ /  |  |  / ___\|  |/    \\  \/  /
-\  ___/\   /|  |  |_/ /_/  >  |   |  \>    <
- \___  >\_/ |__|____\___  /|__|___|  /__/\_ \
-     \/            /_____/         \/      \/  v%s
+  .__     .__       .__
+  |  |__  |__|  ____|__| ____  ___  ___
+  |  |  \ |  | / ___\  |/    \ \  \/  /
+  |   Y  \|  |/ /_/  > |   |  \ >    <
+  |___|  /|__|\___  /|_|___|  //__/\_ \
+       \/    /_____/        \/       \/  v%s
 
 `
 
 // Compact banner for smaller terminals
 const MatrixBannerCompact = `
 ╔═══════════════════════════════════════════╗
-║  ▓█▀▀▀█▓ EVILGINX ▓█▀▀▀█▓  v%s          ║
+║  ▓█▀▀▀█▓  HIGINX  ▓█▀▀▀█▓  v%s          ║
 ╚═══════════════════════════════════════════╝
 `
 
