@@ -1,13 +1,10 @@
 # Higinx
 
-**Higinx** is a man-in-the-middle attack framework used for phishing login credentials along with session cookies, which in turn allows to bypass 2-factor authentication protection.
+**Higinx** is a modern man-in-the-middle attack framework used for phishing login credentials along with session cookies, which in turn allows to bypass 2-factor authentication protection.
 
-This tool is a successor to Evilginx, released in 2017, which used a custom version of nginx HTTP server to provide man-in-the-middle functionality to act as a proxy between a browser and phished website.
-Present version is fully written in GO as a standalone application, which implements its own HTTP and DNS server, making it extremely easy to set up and use.
+This tool is based on [Evilginx](https://github.com/kgretzky/evilginx2), originally released in 2017, which used a custom version of nginx HTTP server to provide man-in-the-middle functionality to act as a proxy between a browser and phished website. Present version is fully written in GO as a standalone application, which implements its own HTTP and DNS server, making it extremely easy to set up and use.
 
-## Disclaimer
-
-Higinx should be used only in legitimate penetration testing assignments with written permission from to-be-phished parties.
+Higinx is significantly updated from the community version of Evilginx to include the following feature additions.
 
 ## Features (v3.4.0)
 
@@ -190,11 +187,15 @@ Ensure no other services are using ports 53 (DNS) or 443 (HTTPS).
 - [ ] Add BiTB integration
 - [ ] Add Rocketchat, SMS, etc. notifications
 - [ ] Rewrite URLs on Phishing Pages to avoid detection through URL Path pattern matching
-- [ ] Define your own CSP (Content security Policy) to avoid telemetry/canary/detection by leaking phishing domains. Implement this PR: https://github.com/kgretzky/evilginx2/pull/1006/commits/d88b98c0d31ce662809797d0942bab101a18270d
+- [x] Define your own CSP (Content security Policy) to avoid telemetry/canary/detection by leaking phishing domains. Implement this PR: https://github.com/kgretzky/evilginx2/pull/1006/commits/d88b98c0d31ce662809797d0942bab101a18270d
 - [ ] Improve crawlfence JS injection and telemetry gathering
 - [ ] Implement background browser
 - [ ] Revamp data storage
 - [ ] Implement API and client-server architecture
+
+## Disclaimer
+
+Higinx should be used only in legitimate penetration testing assignments with written permission from to-be-phished parties.
 
 ## License
 
