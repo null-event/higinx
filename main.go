@@ -106,8 +106,8 @@ func main() {
 	exe_dir := filepath.Dir(exe_path)
 
 	core.Banner()
-	showEvilginxProAd()
-	showEvilginxMasteryAd()
+	//showEvilginxProAd()
+	//showEvilginxMasteryAd()
 
 	_log.SetOutput(log.NullLogger().Writer())
 	certmagic.Default.Logger = zap.NewNop()
