@@ -1,5 +1,7 @@
 # Higinx
 
+<img width="877" height="568" alt="image" src="https://github.com/user-attachments/assets/c7192635-0291-4fa3-9913-e8b5dc02c600" />
+
 **Higinx** is a modern man-in-the-middle attack framework used for phishing login credentials along with session cookies, which in turn allows to bypass 2-factor authentication protection.
 
 This tool is based on [Evilginx](https://github.com/kgretzky/evilginx2), originally released in 2017, which used a custom version of nginx HTTP server to provide man-in-the-middle functionality to act as a proxy between a browser and phished website. Present version is fully written in GO as a standalone application, which implements its own HTTP and DNS server, making it extremely easy to set up and use.
