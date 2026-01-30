@@ -3,3 +3,4 @@ build/
 private/
 /phishlets
 !/phishlets/example.yaml
+.worktrees/
