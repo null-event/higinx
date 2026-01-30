@@ -39,6 +39,32 @@ Campaign analytics and data export capabilities:
   - CSV format for spreadsheet analysis
   - Cookies format for browser import
 
+### Phishlet Generator (Netter)
+Automated phishlet creation from HAR files:
+- **HAR File Parsing**: Generate phishlets from browser-exported HTTP Archive files
+- **Full Traffic Analysis**: Automatically extracts domains, cookies, POST requests, and authentication flows
+- **Interactive Selection**: Guided prompts for selecting auth tokens and credentials
+- **Login Detection**: Automatically identifies login endpoints that set authentication cookies
+- **YAML Generation**: Produces valid phishlet configurations with proper formatting
+
+**Usage:**
+```
+evilginx> netter generate ~/Downloads/login-session.har
+```
+
+**Prerequisites:**
+1. Open Chrome DevTools (F12) → Network tab
+2. Clear existing requests
+3. Perform complete login flow on target site
+4. Right-click in Network tab → "Save all as HAR with content"
+
+**Features:**
+- Strict validation ensures HAR contains required authentication data
+- Interactive cookie selection with auth token detection
+- Automatic credential field detection (username/password)
+- Generated phishlets include helpful comments for manual refinement
+- Option to save directly to phishlets directory
+
 ### CLI Enhancements
 Improved terminal experience:
 - **Shell Command**: Execute bash commands directly from the higinx CLI
