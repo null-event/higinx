@@ -421,16 +421,12 @@ func (a *HARAnalysis) Validate() error {
 		return fmt.Errorf("no domains found in HAR file - ensure the HAR contains actual HTTP traffic")
 	}
 
-	if len(a.PostRequests) == 0 {
-		return fmt.Errorf("no POST requests found - capture a login flow to generate credentials section")
-	}
-
-	if len(a.Cookies) == 0 {
-		return fmt.Errorf("no cookies found in responses - ensure the HAR captures Set-Cookie headers")
-	}
-
-	if a.LoginCandidate == nil {
-		return fmt.Errorf("no login endpoint detected - no POST request contains both credentials and sets auth cookies")
+	// Require either POST requests OR cookies (or both)
+	// This allows:
+	// - Login flows with POST but no cookies yet
+	// - Session capture with cookies but no login POST
+	if len(a.PostRequests) == 0 && len(a.Cookies) == 0 {
+		return fmt.Errorf("no POST requests or cookies found - HAR must contain login flow or session cookies")
 	}
 
 	return nil

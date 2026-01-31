@@ -172,7 +172,10 @@ func (ng *NetterGenerator) promptCookieSelection(analysis *HARAnalysis) ([]*Cook
 
 func (ng *NetterGenerator) promptCredentialsConfirmation(analysis *HARAnalysis) (*PostRequestInfo, error) {
 	if analysis.LoginCandidate == nil {
-		return nil, fmt.Errorf("no login credentials detected")
+		log.Warning("No login credentials auto-detected")
+		fmt.Fprintf(color.Output, "\n%s\n\n",
+			color.YellowString("Could not auto-detect credentials. Please select manually."))
+		return ng.promptManualCredentialSelection(analysis)
 	}
 
 	cred := analysis.LoginCandidate
@@ -291,7 +294,10 @@ func (ng *NetterGenerator) promptManualCredentialSelection(analysis *HARAnalysis
 
 func (ng *NetterGenerator) promptLoginConfirmation(analysis *HARAnalysis) (*PostRequestInfo, error) {
 	if analysis.LoginCandidate == nil {
-		return nil, fmt.Errorf("no login endpoint detected")
+		log.Warning("No login endpoint auto-detected")
+		fmt.Fprintf(color.Output, "\n%s\n\n",
+			color.YellowString("Could not auto-detect login endpoint. Please select manually."))
+		return ng.promptManualLoginSelection(analysis)
 	}
 
 	login := analysis.LoginCandidate
