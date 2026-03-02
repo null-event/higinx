@@ -17,6 +17,19 @@ Advanced bot and crawler detection system to protect phishing infrastructure fro
 - **Learning Mode**: Collect legitimate JA4 signatures before enabling blocking
 - **Per-Phishlet Configuration**: Enable/disable crawlfence per phishlet via YAML
 - **Terminal Commands**: `crawlfence`, `crawlfence ja4`, `crawlfence clear`
+- **Anti-Fingerprinting JS Injection**: Telemetry script is randomized per-session to evade signature-based detection:
+  - Variable names, property access order, and timing jitter are randomized on every injection
+  - Send method randomly alternates between `fetch()` and `XMLHttpRequest`
+  - Static junk code (`doNothing()`) replaced with randomly generated decoy functions
+- **Randomized Telemetry Endpoints**: The callback URL is no longer a static `/cf/<session_id>` path — each session gets a unique endpoint that resembles a legitimate resource (e.g., `/assets/js/<hash>.js`, `/cdn-cgi/scripts/<hash>.js`), matched via O(1) map lookup instead of per-request regex compilation
+- **Expanded Bot Indicators**: Telemetry now checks 13+ signals beyond basic automation flags:
+  - `window.chrome` presence (missing in headless Chrome)
+  - `navigator.connection` (missing in many automation frameworks)
+  - `Notification.permission` (defaults to "denied" in headless)
+  - `navigator.hardwareConcurrency` (0 in bots)
+  - `navigator.deviceMemory` (absent in headless Chrome)
+  - Canvas fingerprint hash (consistent across bot sessions)
+  - `window.outerWidth/outerHeight` (0x0 in headless)
 
 ### Multiple Certificate Support
 Flexible certificate management for complex deployments:
@@ -216,7 +229,7 @@ Ensure no other services are using ports 53 (DNS) or 443 (HTTPS).
 - [ ] Add Rocketchat, SMS, etc. notifications
 - [ ] Rewrite URLs on Phishing Pages to avoid detection through URL Path pattern matching
 - [x] Define your own CSP (Content security Policy) to avoid telemetry/canary/detection by leaking phishing domains. Implement this PR: https://github.com/kgretzky/evilginx2/pull/1006/commits/d88b98c0d31ce662809797d0942bab101a18270d
-- [ ] Improve crawlfence JS injection and telemetry gathering
+- [x] Improve crawlfence JS injection and telemetry gathering
 - [ ] Implement background browser
 - [ ] Revamp data storage
 - [ ] Implement API and client-server architecture
