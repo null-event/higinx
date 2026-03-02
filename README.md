@@ -244,14 +244,6 @@ The session database has been migrated from BuntDB to SQLite (via the pure-Go [m
 - **Drop-in replacement**: The public `database.Database` API is completely unchanged — no modifications to any callers in `core/` or `main.go`
 - **Same database path**: The SQLite file is created at the existing `~/.evilginx/data.db` location
 
-### TLS ClientHello Parsing Enhancements
-Extended the vendored `go-vhost` library to parse additional TLS ClientHello extensions required by Crawlfence JA4 fingerprinting:
-
-- **supported_versions** (ext 43): Enables accurate TLS 1.3 version detection
-- **ALPN** (ext 16): Extracts protocol negotiation values (h2, http/1.1)
-- **signature_algorithms** (ext 13): Captures signature algorithm preferences
-- **Extension type tracking**: All extension type IDs are now collected for JA4 extension count and hash computation
-
 ## Disclaimer
 
 Higinx should be used only in legitimate penetration testing assignments with written permission from to-be-phished parties.
