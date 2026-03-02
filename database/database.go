@@ -1,31 +1,45 @@
 package database
 
 import (
-	"encoding/json"
-	"strconv"
+	"database/sql"
+	"fmt"
 
-	"github.com/tidwall/buntdb"
+	_ "modernc.org/sqlite"
 )
 
 type Database struct {
 	path string
-	db   *buntdb.DB
+	db   *sql.DB
 }
 
 func NewDatabase(path string) (*Database, error) {
-	var err error
 	d := &Database{
 		path: path,
 	}
 
-	d.db, err = buntdb.Open(path)
+	var err error
+	d.db, err = sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
 	}
 
-	d.sessionsInit()
+	// Set WAL mode and busy timeout for better concurrency
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA busy_timeout=5000",
+	}
+	for _, p := range pragmas {
+		if _, err := d.db.Exec(p); err != nil {
+			d.db.Close()
+			return nil, fmt.Errorf("failed to set pragma: %w", err)
+		}
+	}
 
-	d.db.Shrink()
+	if err := d.sessionsInit(); err != nil {
+		d.db.Close()
+		return nil, err
+	}
+
 	return d, nil
 }
 
@@ -35,38 +49,31 @@ func (d *Database) CreateSession(sid string, phishlet string, landing_url string
 }
 
 func (d *Database) ListSessions() ([]*Session, error) {
-	s, err := d.sessionsList()
-	return s, err
+	return d.sessionsList()
 }
 
 func (d *Database) SetSessionUsername(sid string, username string) error {
-	err := d.sessionsUpdateUsername(sid, username)
-	return err
+	return d.sessionsUpdateUsername(sid, username)
 }
 
 func (d *Database) SetSessionPassword(sid string, password string) error {
-	err := d.sessionsUpdatePassword(sid, password)
-	return err
+	return d.sessionsUpdatePassword(sid, password)
 }
 
 func (d *Database) SetSessionCustom(sid string, name string, value string) error {
-	err := d.sessionsUpdateCustom(sid, name, value)
-	return err
+	return d.sessionsUpdateCustom(sid, name, value)
 }
 
 func (d *Database) SetSessionBodyTokens(sid string, tokens map[string]string) error {
-	err := d.sessionsUpdateBodyTokens(sid, tokens)
-	return err
+	return d.sessionsUpdateBodyTokens(sid, tokens)
 }
 
 func (d *Database) SetSessionHttpTokens(sid string, tokens map[string]string) error {
-	err := d.sessionsUpdateHttpTokens(sid, tokens)
-	return err
+	return d.sessionsUpdateHttpTokens(sid, tokens)
 }
 
 func (d *Database) SetSessionCookieTokens(sid string, tokens map[string]map[string]*CookieToken) error {
-	err := d.sessionsUpdateCookieTokens(sid, tokens)
-	return err
+	return d.sessionsUpdateCookieTokens(sid, tokens)
 }
 
 func (d *Database) DeleteSession(sid string) error {
@@ -74,8 +81,7 @@ func (d *Database) DeleteSession(sid string) error {
 	if err != nil {
 		return err
 	}
-	err = d.sessionsDelete(s.Id)
-	return err
+	return d.sessionsDelete(s.Id)
 }
 
 func (d *Database) DeleteSessionById(id int) error {
@@ -83,51 +89,9 @@ func (d *Database) DeleteSessionById(id int) error {
 	if err != nil {
 		return err
 	}
-	err = d.sessionsDelete(id)
-	return err
+	return d.sessionsDelete(id)
 }
 
 func (d *Database) Flush() {
-	d.db.Shrink()
-}
-
-func (d *Database) genIndex(table_name string, id int) string {
-	return table_name + ":" + strconv.Itoa(id)
-}
-
-func (d *Database) getLastId(table_name string) (int, error) {
-	var id int = 1
-	var err error
-	err = d.db.View(func(tx *buntdb.Tx) error {
-		var s_id string
-		if s_id, err = tx.Get(table_name + ":0:id"); err != nil {
-			return err
-		}
-		if id, err = strconv.Atoi(s_id); err != nil {
-			return err
-		}
-		return nil
-	})
-	return id, err
-}
-
-func (d *Database) getNextId(table_name string) (int, error) {
-	var id int = 1
-	var err error
-	err = d.db.Update(func(tx *buntdb.Tx) error {
-		var s_id string
-		if s_id, err = tx.Get(table_name + ":0:id"); err == nil {
-			if id, err = strconv.Atoi(s_id); err != nil {
-				return err
-			}
-		}
-		tx.Set(table_name+":0:id", strconv.Itoa(id+1), nil)
-		return nil
-	})
-	return id, err
-}
-
-func (d *Database) getPivot(t interface{}) string {
-	pivot, _ := json.Marshal(t)
-	return string(pivot)
+	d.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
 }

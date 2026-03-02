@@ -7,6 +7,9 @@ github.com/cenkalti/backoff/v3
 # github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 ## explicit
 github.com/chzyer/readline
+# github.com/dustin/go-humanize v1.0.1
+## explicit; go 1.16
+github.com/dustin/go-humanize
 # github.com/elazarl/goproxy v0.0.0-20220529153421-8ea89ba92021 => github.com/kgretzky/goproxy v0.0.0-20220622134552-7d0e0c658440
 ## explicit
 github.com/elazarl/goproxy
@@ -30,9 +33,17 @@ github.com/go-acme/lego/v3/log
 # github.com/go-resty/resty/v2 v2.12.0
 ## explicit; go 1.16
 github.com/go-resty/resty/v2
+# github.com/google/uuid v1.3.0
+## explicit
+github.com/google/uuid
 # github.com/gorilla/mux v1.7.3
 ## explicit
 github.com/gorilla/mux
+# github.com/hashicorp/golang-lru/v2 v2.0.7
+## explicit; go 1.18
+github.com/hashicorp/golang-lru/v2
+github.com/hashicorp/golang-lru/v2/internal
+github.com/hashicorp/golang-lru/v2/simplelru
 # github.com/hashicorp/hcl v1.0.0
 ## explicit
 github.com/hashicorp/hcl
@@ -60,8 +71,8 @@ github.com/magiconair/properties
 # github.com/mattn/go-colorable v0.1.12
 ## explicit; go 1.13
 github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.14
-## explicit; go 1.12
+# github.com/mattn/go-isatty v0.0.16
+## explicit; go 1.15
 github.com/mattn/go-isatty
 # github.com/mholt/acmez v1.2.0
 ## explicit; go 1.20
@@ -76,9 +87,15 @@ github.com/mitchellh/mapstructure
 # github.com/mwitkow/go-http-dialer v0.0.0-20161116154839-378f744fb2b8
 ## explicit
 github.com/mwitkow/go-http-dialer
+# github.com/ncruces/go-strftime v0.1.9
+## explicit; go 1.17
+github.com/ncruces/go-strftime
 # github.com/pelletier/go-toml v1.9.4
 ## explicit; go 1.12
 github.com/pelletier/go-toml
+# github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec
+## explicit; go 1.12
+github.com/remyoudompheng/bigfft
 # github.com/spf13/afero v1.8.1
 ## explicit; go 1.13
 github.com/spf13/afero
@@ -113,31 +130,8 @@ github.com/tdewolff/parse
 github.com/tdewolff/parse/buffer
 github.com/tdewolff/parse/js
 github.com/tdewolff/parse/strconv
-# github.com/tidwall/btree v0.0.0-20170113224114-9876f1454cf0
-## explicit
-github.com/tidwall/btree
-# github.com/tidwall/buntdb v1.1.0
-## explicit
-github.com/tidwall/buntdb
-# github.com/tidwall/gjson v1.14.0
-## explicit; go 1.12
-github.com/tidwall/gjson
-# github.com/tidwall/grect v0.0.0-20161006141115-ba9a043346eb
-## explicit
-github.com/tidwall/grect
-# github.com/tidwall/match v1.1.1
-## explicit; go 1.15
-github.com/tidwall/match
-# github.com/tidwall/pretty v1.2.0
-## explicit; go 1.16
-github.com/tidwall/pretty
-# github.com/tidwall/rtree v0.0.0-20180113144539-6cd427091e0e
-## explicit
-github.com/tidwall/rtree
-github.com/tidwall/rtree/base
-# github.com/tidwall/tinyqueue v0.0.0-20180302190814-1e39f5511563
-## explicit
-github.com/tidwall/tinyqueue
+# github.com/tdewolff/test v1.0.11
+## explicit; go 1.18
 # github.com/zeebo/blake3 v0.2.3
 ## explicit; go 1.13
 github.com/zeebo/blake3
@@ -225,4 +219,51 @@ gopkg.in/square/go-jose.v2/json
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
+# modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6
+## explicit; go 1.20
+modernc.org/gc/v3
+# modernc.org/libc v1.41.0
+## explicit; go 1.20
+modernc.org/libc
+modernc.org/libc/errno
+modernc.org/libc/fcntl
+modernc.org/libc/fts
+modernc.org/libc/grp
+modernc.org/libc/honnef.co/go/netdb
+modernc.org/libc/langinfo
+modernc.org/libc/limits
+modernc.org/libc/netdb
+modernc.org/libc/netinet/in
+modernc.org/libc/poll
+modernc.org/libc/pthread
+modernc.org/libc/pwd
+modernc.org/libc/signal
+modernc.org/libc/stdio
+modernc.org/libc/stdlib
+modernc.org/libc/sys/socket
+modernc.org/libc/sys/stat
+modernc.org/libc/sys/types
+modernc.org/libc/termios
+modernc.org/libc/time
+modernc.org/libc/unistd
+modernc.org/libc/utime
+modernc.org/libc/uuid
+modernc.org/libc/uuid/uuid
+modernc.org/libc/wctype
+# modernc.org/mathutil v1.6.0
+## explicit; go 1.18
+modernc.org/mathutil
+# modernc.org/memory v1.7.2
+## explicit; go 1.18
+modernc.org/memory
+# modernc.org/sqlite v1.29.6
+## explicit; go 1.20
+modernc.org/sqlite
+modernc.org/sqlite/lib
+# modernc.org/strutil v1.2.0
+## explicit; go 1.18
+modernc.org/strutil
+# modernc.org/token v1.1.0
+## explicit
+modernc.org/token
 # github.com/elazarl/goproxy => github.com/kgretzky/goproxy v0.0.0-20220622134552-7d0e0c658440

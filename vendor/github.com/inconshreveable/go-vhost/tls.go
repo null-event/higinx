@@ -62,15 +62,15 @@ const (
 
 // TLS extension numbers
 var (
-	extensionServerName          uint16 = 0
-	extensionStatusRequest       uint16 = 5
-	extensionSupportedCurves     uint16 = 10
-	extensionSupportedPoints     uint16 = 11
-	extensionSignatureAlgorithms uint16 = 13
-	extensionALPN                uint16 = 16
-	extensionSessionTicket       uint16 = 35
-	extensionSupportedVersions   uint16 = 43
-	extensionNextProtoNeg        uint16 = 13172 // not IANA assigned
+	extensionServerName      uint16 = 0
+	extensionStatusRequest   uint16 = 5
+	extensionSupportedCurves uint16 = 10
+	extensionSupportedPoints uint16 = 11
+	extensionSignatureAlgos  uint16 = 13
+	extensionALPN            uint16 = 16
+	extensionSessionTicket   uint16 = 35
+	extensionSupportedVersions uint16 = 43
+	extensionNextProtoNeg    uint16 = 13172 // not IANA assigned
 )
 
 // TLS CertificateStatusType (RFC 3546)
@@ -372,7 +372,6 @@ func (m *ClientHelloMsg) unmarshal(data []byte) bool {
 			return false
 		}
 
-		// Track all extension types for JA4 fingerprinting
 		m.ExtensionTypes = append(m.ExtensionTypes, extension)
 
 		switch extension {
@@ -432,61 +431,62 @@ func (m *ClientHelloMsg) unmarshal(data []byte) bool {
 			}
 			m.SupportedPoints = make([]uint8, l)
 			copy(m.SupportedPoints, data[1:])
-		case extensionSessionTicket:
-			// http://tools.ietf.org/html/rfc5077#section-3.2
-			m.TicketSupported = true
-			m.SessionTicket = data[:length]
-		case extensionSignatureAlgorithms:
-			// RFC 5246 section 7.4.1.4.1
+		case extensionSignatureAlgos:
+			// https://tools.ietf.org/html/rfc5246#section-7.4.1.4.1
 			if length < 2 {
-				break
+				return false
 			}
 			l := int(data[0])<<8 | int(data[1])
 			if l%2 == 1 || length != l+2 {
-				break
+				return false
 			}
-			numAlgos := l / 2
-			m.SignatureAlgos = make([]uint16, numAlgos)
+			n := l / 2
+			m.SignatureAlgos = make([]uint16, n)
 			d := data[2:]
-			for i := 0; i < numAlgos; i++ {
+			for i := 0; i < n; i++ {
 				m.SignatureAlgos[i] = uint16(d[0])<<8 | uint16(d[1])
 				d = d[2:]
 			}
 		case extensionALPN:
-			// RFC 7301
+			// https://tools.ietf.org/html/rfc7301#section-3.1
 			if length < 2 {
-				break
+				return false
 			}
 			l := int(data[0])<<8 | int(data[1])
-			if length != l+2 {
-				break
-			}
 			d := data[2:]
-			for len(d) > 0 {
-				protoLen := int(d[0])
-				d = d[1:]
-				if len(d) < protoLen {
-					break
+			for l > 0 {
+				if len(d) < 1 {
+					return false
 				}
-				m.ALPNProtocols = append(m.ALPNProtocols, string(d[:protoLen]))
-				d = d[protoLen:]
+				strLen := int(d[0])
+				d = d[1:]
+				if len(d) < strLen {
+					return false
+				}
+				m.ALPNProtocols = append(m.ALPNProtocols, string(d[:strLen]))
+				d = d[strLen:]
+				l -= 1 + strLen
 			}
 		case extensionSupportedVersions:
-			// RFC 8446
+			// https://tools.ietf.org/html/rfc8446#section-4.2.1
 			if length < 1 {
-				break
+				return false
 			}
 			l := int(data[0])
 			if l%2 == 1 || length != l+1 {
-				break
+				return false
 			}
-			numVersions := l / 2
-			m.SupportedVersions = make([]uint16, numVersions)
+			n := l / 2
+			m.SupportedVersions = make([]uint16, n)
 			d := data[1:]
-			for i := 0; i < numVersions; i++ {
+			for i := 0; i < n; i++ {
 				m.SupportedVersions[i] = uint16(d[0])<<8 | uint16(d[1])
 				d = d[2:]
 			}
+		case extensionSessionTicket:
+			// http://tools.ietf.org/html/rfc5077#section-3.2
+			m.TicketSupported = true
+			m.SessionTicket = data[:length]
 		}
 		data = data[length:]
 	}

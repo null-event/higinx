@@ -231,8 +231,26 @@ Ensure no other services are using ports 53 (DNS) or 443 (HTTPS).
 - [x] Define your own CSP (Content security Policy) to avoid telemetry/canary/detection by leaking phishing domains. Implement this PR: https://github.com/kgretzky/evilginx2/pull/1006/commits/d88b98c0d31ce662809797d0942bab101a18270d
 - [x] Improve crawlfence JS injection and telemetry gathering
 - [ ] Implement background browser
-- [ ] Revamp data storage
+- [x] Revamp data storage
 - [ ] Implement API and client-server architecture
+
+### SQLite Migration (BuntDB Replacement)
+The session database has been migrated from BuntDB to SQLite (via the pure-Go [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) driver, no CGO required):
+
+- **Proper relational storage**: Sessions are stored in a typed schema with indexed columns instead of serialized JSON blobs in a key-value store
+- **Efficient partial updates**: Updating a single field (e.g., username or password) writes only that column rather than re-serializing and replacing the entire session object
+- **WAL mode**: Write-Ahead Logging provides better concurrent read/write performance and crash resilience
+- **Maintained dependency**: BuntDB has been unmaintained since 2020; modernc.org/sqlite is actively developed and tracks upstream SQLite releases
+- **Drop-in replacement**: The public `database.Database` API is completely unchanged — no modifications to any callers in `core/` or `main.go`
+- **Same database path**: The SQLite file is created at the existing `~/.evilginx/data.db` location
+
+### TLS ClientHello Parsing Enhancements
+Extended the vendored `go-vhost` library to parse additional TLS ClientHello extensions required by Crawlfence JA4 fingerprinting:
+
+- **supported_versions** (ext 43): Enables accurate TLS 1.3 version detection
+- **ALPN** (ext 16): Extracts protocol negotiation values (h2, http/1.1)
+- **signature_algorithms** (ext 13): Captures signature algorithm preferences
+- **Extension type tracking**: All extension type IDs are now collected for JA4 extension count and hash computation
 
 ## Disclaimer
 
